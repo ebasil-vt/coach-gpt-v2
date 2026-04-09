@@ -88,44 +88,44 @@ You will receive:
 
 Your job is to produce a STRUCTURED JSON analysis:
 
-{
+{{
   "opponent": "Team Name",
   "research_sources": ["list of sources used"],
   "data_instructions": ["If data is incomplete, list specific steps the coach should take to get more data"],
-  "opponent_record": {
-    "wins": int or null,
-    "losses": int or null,
+  "opponent_record": {{
+    "wins": "int or null",
+    "losses": "int or null",
     "record_source": "where you found this"
-  },
+  }},
   "opponent_results": [
-    {
+    {{
       "vs": "Team Name",
-      "result": "W" or "L",
-      "score": "52-48" or null,
-      "date": "YYYY-MM-DD" or null
-    }
+      "result": "W or L",
+      "score": "52-48 or null",
+      "date": "YYYY-MM-DD or null"
+    }}
   ],
   "common_opponents": [
-    {
+    {{
       "team": "Team Name",
       "our_result": "W 58-40",
-      "their_result": "L 45-52" or "W 50-48" or "unknown",
+      "their_result": "L 45-52 or W 50-48 or unknown",
       "comparison": "We beat them by 18, opponent lost by 7 → we're ~25 points better vs this team"
-    }
+    }}
   ],
-  "strength_assessment": {
-    "level": "weaker" | "comparable" | "stronger" | "unknown",
-    "confidence": "high" | "medium" | "low",
+  "strength_assessment": {{
+    "level": "weaker | comparable | stronger | unknown",
+    "confidence": "high | medium | low",
     "reasoning": "Based on common opponents and results..."
-  },
+  }},
   "key_findings": [
     "Any notable facts: coaching style, key players, defensive scheme, etc."
   ],
-  "data_quality": {
-    "completeness": "full" | "partial" | "minimal",
+  "data_quality": {{
+    "completeness": "full | partial | minimal",
     "note": "What we know vs what's missing"
-  }
-}
+  }}
+}}
 
 Rules:
 1. Only include facts you actually found — NEVER invent results or records.
