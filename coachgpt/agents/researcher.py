@@ -298,74 +298,126 @@ def _fetch_page(url: str, timeout: int = 15) -> str:
 
 def _web_search(client, opponent: str,
                 league_info: str = "") -> str:
-    """Search the web for opponent information using Brave Search API + page fetching."""
+    """Multi-tier web search with fallback chain and quality tracking.
 
-    # Targeted searches across key basketball data sources
-    search_queries = [
-        # GameChanger — opponent team page and game recaps
-        f"site:web.gc.com {opponent} basketball",
-        # GameChanger — our team's games vs this opponent
-        f"site:web.gc.com \"{_TEAM_NAME}\" \"{opponent}\"",
-        # HCRPS — league standings, schedules, scores
-        f"site:hcrpsports.org {opponent}",
-        # HCRPS — our team in standings (for cross-reference)
-        f"site:hcrpsports.org \"{_TEAM_NAME}\"",
-        # Exposure Events — tournament results, rankings
-        f"site:exposureevents.com {opponent} basketball",
-        # Exposure Events — our team (to find common tournaments)
-        f"site:exposureevents.com \"{_TEAM_NAME}\"",
-        # General search for opponent
-        f"{opponent} youth basketball {_TEAM_LOCATION} results scores 2025 2026",
-    ]
-    if league_info:
-        search_queries.append(f"{opponent} {league_info}")
-    # Also search for matchup history
-    search_queries.append(f"\"{_TEAM_NAME}\" vs \"{opponent}\"")
+    Tier 1: Direct known URLs (GC team pages, HCRPS schedule)
+    Tier 2: Brave Search (site-specific: GC, HCRPS, Exposure Events)
+    Tier 3: Brave Search (general web)
+    Each tier logs what it found so we can report data quality.
+    """
 
-    # Run actual web searches
-    all_results = []
-    for query in search_queries:
-        results = _brave_search(query, count=5)
-        for r in results:
-            if r not in all_results:
-                all_results.append(r)
+    source_log = []  # Track what each source returned
 
-    if not all_results:
-        return "No web search results found. Brave Search API key may not be configured."
-
-    # Always fetch our team's current GC schedule for cross-reference
+    # ── TIER 1: Direct fetch of known URLs ──────────────────────────
     fetched_pages = []
-    our_gc_url = f"https://web.gc.com/teams/{_GC_TEAM_CURRENT}"
-    print(f"  [researcher] Fetching our team schedule: {our_gc_url}")
-    our_gc_text = _fetch_page(our_gc_url)
-    if our_gc_text:
-        fetched_pages.append(f"PAGE: Our Team GameChanger ({our_gc_url})\n{our_gc_text}")
 
-    # Fetch the most promising pages for opponent data
+    # Our team's GC schedule (always fetch — shows all opponents we've played)
+    our_gc_url = f"https://web.gc.com/teams/{_GC_TEAM_CURRENT}"
+    print(f"  [researcher] Tier 1: Fetching our GC schedule: {our_gc_url}")
+    our_gc_text = _fetch_page(our_gc_url)
+    if our_gc_text and len(our_gc_text) > 200:
+        fetched_pages.append(f"SOURCE: Our Team GameChanger Schedule ({our_gc_url})\n{our_gc_text}")
+        source_log.append(f"✓ Our GC schedule: {len(our_gc_text)} chars")
+    else:
+        source_log.append("✗ Our GC schedule: empty or JS-rendered (coach should paste GC data)")
+
+    # Previous season GC (for historical matchups)
+    prev_gc_url = f"https://web.gc.com/teams/{_GC_TEAM_PREV}"
+    print(f"  [researcher] Tier 1: Fetching previous season GC: {prev_gc_url}")
+    prev_gc_text = _fetch_page(prev_gc_url)
+    if prev_gc_text and len(prev_gc_text) > 200:
+        fetched_pages.append(f"SOURCE: Previous Season GameChanger ({prev_gc_url})\n{prev_gc_text}")
+        source_log.append(f"✓ Previous season GC: {len(prev_gc_text)} chars")
+    else:
+        source_log.append("✗ Previous season GC: empty or JS-rendered")
+
+    # HCRPS standings (direct URL with known IDs)
+    hcrps_url = (f"https://www.hcrpsports.org/schedule/print/league_instance/"
+                 f"{_LEAGUE_INSTANCE}?schedule_type=index&subseason={_LEAGUE_SUBSEASON}")
+    print(f"  [researcher] Tier 1: Fetching HCRPS schedule: {hcrps_url}")
+    hcrps_text = _fetch_page(hcrps_url)
+    if hcrps_text and len(hcrps_text) > 200:
+        fetched_pages.append(f"SOURCE: HCRPS League Schedule ({hcrps_url})\n{hcrps_text}")
+        source_log.append(f"✓ HCRPS schedule: {len(hcrps_text)} chars")
+    else:
+        source_log.append("✗ HCRPS schedule: empty (coach should upload webarchive)")
+
+    # ── TIER 2: Brave Search (site-specific) ────────────────────────
+    all_results = []
+    if BRAVE_API_KEY:
+        site_queries = [
+            (f"site:web.gc.com {opponent} basketball", "GameChanger"),
+            (f"site:hcrpsports.org {opponent}", "HCRPS"),
+            (f"site:exposureevents.com {opponent} basketball", "Exposure Events"),
+            (f"\"{_TEAM_NAME}\" vs \"{opponent}\"", "matchup history"),
+        ]
+        for query, label in site_queries:
+            results = _brave_search(query, count=5)
+            if results:
+                source_log.append(f"✓ Brave [{label}]: {len(results)} results")
+                for r in results:
+                    if r not in all_results:
+                        all_results.append(r)
+            else:
+                source_log.append(f"✗ Brave [{label}]: no results")
+
+        # ── TIER 3: Brave Search (general) ──────────────────────────
+        general_queries = [
+            f"{opponent} youth basketball {_TEAM_LOCATION} results 2025 2026",
+        ]
+        if league_info:
+            general_queries.append(f"{opponent} {league_info}")
+        for query in general_queries:
+            results = _brave_search(query, count=5)
+            if results:
+                source_log.append(f"✓ Brave [general]: {len(results)} results")
+                for r in results:
+                    if r not in all_results:
+                        all_results.append(r)
+    else:
+        source_log.append("✗ Brave Search: API key not configured")
+
+    # Fetch top search result pages from priority domains
     priority_domains = ["web.gc.com", "hcrpsports.org", "exposureevents.com", "maxpreps.com"]
     fetch_count = 0
     for r in all_results:
-        if fetch_count >= 4:
+        if fetch_count >= 3:
             break
         url = r.get("url", "")
         if any(domain in url for domain in priority_domains):
-            print(f"  [researcher] Fetching: {url}")
+            print(f"  [researcher] Fetching search result: {url}")
             page_text = _fetch_page(url)
-            if page_text:
-                fetched_pages.append(f"PAGE: {r['title']} ({url})\n{page_text}")
+            if page_text and len(page_text) > 100:
+                fetched_pages.append(f"SOURCE: {r['title']} ({url})\n{page_text}")
                 fetch_count += 1
 
-    # Format search results
-    formatted = []
-    for i, r in enumerate(all_results[:15], 1):
-        formatted.append(f"{i}. **{r['title']}**\n   URL: {r['url']}\n   {r['description']}")
+    # ── Build source quality report ─────────────────────────────────
+    source_report = "SEARCH QUALITY LOG:\n" + "\n".join(source_log)
+    successful_sources = sum(1 for s in source_log if s.startswith("✓"))
+    total_sources = len(source_log)
+    source_report += f"\n\nData coverage: {successful_sources}/{total_sources} sources returned data"
 
-    search_text = "\n\n".join(formatted)
+    if successful_sources == 0:
+        source_report += ("\n⚠ ALL SOURCES FAILED. Possible reasons:"
+                         "\n  - GameChanger pages are JavaScript-rendered (need coach to copy-paste)"
+                         "\n  - HCRPS page structure changed (need fresh webarchive upload)"
+                         "\n  - Brave API key missing or opponent name doesn't match any results"
+                         "\n  - Opponent may not have a public web presence")
 
-    # Add fetched page content
+    # ── Format for Claude synthesis ─────────────────────────────────
+    search_text = ""
+    if all_results:
+        formatted = []
+        for i, r in enumerate(all_results[:15], 1):
+            formatted.append(f"{i}. **{r['title']}**\n   URL: {r['url']}\n   {r['description']}")
+        search_text = "SEARCH RESULTS:\n" + "\n\n".join(formatted)
+
     page_content = ""
     if fetched_pages:
         page_content = "\n\nFETCHED PAGE CONTENT:\n" + "\n\n---\n\n".join(fetched_pages)
+
+    if not search_text and not page_content:
+        return source_report + "\n\nNo data retrieved from any source."
 
     # Have Claude synthesize everything
     response = client.messages.create(
@@ -374,18 +426,23 @@ def _web_search(client, opponent: str,
         messages=[{
             "role": "user",
             "content": (
-                f"I searched the web for basketball team '{opponent}'. Here are the search results:\n\n"
+                f"I'm researching basketball team '{opponent}' for an upcoming game.\n\n"
+                f"{source_report}\n\n"
                 f"{search_text}"
                 f"{page_content}\n\n"
-                f"Extract ALL factual information about this team: game results (scores, opponents, dates), "
-                f"standings, win-loss record, player names/numbers, tournament placements, and schedule. "
-                f"Only include facts from the search results and page content — do NOT invent anything. "
-                f"If no results are relevant, say 'No relevant data found in search results.'"
+                f"Extract ALL factual information about '{opponent}': game results (scores, opponents, "
+                f"dates), standings, win-loss record, player names/numbers, tournament placements. "
+                f"Also look for any games between '{_TEAM_NAME}' and '{opponent}' in the data.\n\n"
+                f"CRITICAL RULES:\n"
+                f"1. Only include facts actually present in the data above — NEVER invent results\n"
+                f"2. If a page returned empty/JS content, note it as unreliable\n"
+                f"3. Clearly label which source each fact came from\n"
+                f"4. If data is insufficient, list exactly what the coach should do to get it"
             ),
         }],
     )
 
-    return response.content[0].text.strip()
+    return source_report + "\n\nANALYSIS:\n" + response.content[0].text.strip()
 
 
 def research_and_compare(opponent: str, league_info: str = "") -> dict:
