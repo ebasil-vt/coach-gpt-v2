@@ -1,0 +1,17 @@
+[project]
+name = "coachgpt"
+version = "0.1.0"
+description = "Basketball coaching intelligence platform"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.42.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+coachgpt = "coachgpt.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"

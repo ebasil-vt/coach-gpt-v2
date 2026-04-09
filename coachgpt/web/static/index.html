@@ -1,0 +1,2301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoachGPT</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3345;
+    --text: #e4e6ed;
+    --text2: #9298a8;
+    --accent: #4f8ff7;
+    --accent2: #3b7ae0;
+    --green: #34c759;
+    --red: #ff453a;
+    --orange: #ff9f0a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ── Navigation ────────────────────── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  nav h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  nav h1 span { color: var(--accent); }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.15s;
+  }
+
+  .nav-tab:hover { background: var(--surface2); color: var(--text); }
+  .nav-tab.active { background: var(--accent); color: #fff; }
+
+  /* ── Pages ─────────────────────────── */
+  .page { display: none; padding: 20px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* ── Cards ─────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .card h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  /* ── Form Elements ─────────────────── */
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  input[type="text"], input[type="date"], textarea, select {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    margin-bottom: 16px;
+    transition: border-color 0.15s;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  textarea { resize: vertical; min-height: 150px; }
+
+  /* ── File Upload ───────────────────── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(79, 143, 247, 0.05);
+  }
+
+  .upload-zone .icon { font-size: 36px; margin-bottom: 8px; }
+  .upload-zone p { color: var(--text2); font-size: 14px; }
+  .upload-zone .filename {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 15px;
+    margin-top: 8px;
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* ── Buttons ───────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    width: 100%;
+  }
+
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-scout {
+    background: var(--orange);
+    color: #000;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  /* ── Status / Loading ──────────────── */
+  .status {
+    display: none;
+    padding: 16px;
+    border-radius: 10px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  .status.loading { display: block; background: rgba(79, 143, 247, 0.1); border: 1px solid rgba(79, 143, 247, 0.2); color: var(--accent); }
+  .status.success { display: block; background: rgba(52, 199, 89, 0.1); border: 1px solid rgba(52, 199, 89, 0.2); color: var(--green); }
+  .status.error { display: block; background: rgba(255, 69, 58, 0.1); border: 1px solid rgba(255, 69, 58, 0.2); color: var(--red); }
+
+  .spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--accent); border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Agent Progress Tracker ────────── */
+  .agent-progress {
+    display: none;
+    margin: 16px 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .agent-progress.visible { display: block; }
+
+  .agent-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    opacity: 0.3;
+    transition: all 0.3s ease;
+  }
+
+  .agent-step:last-child { border-bottom: none; }
+  .agent-step.active { opacity: 1; background: rgba(79, 143, 247, 0.05); }
+  .agent-step.done { opacity: 1; }
+
+  .agent-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .agent-icon.orchestrator { background: rgba(147, 130, 255, 0.15); color: #9382ff; }
+  .agent-icon.ingestion { background: rgba(79, 143, 247, 0.15); color: var(--accent); }
+  .agent-icon.analyst { background: rgba(255, 159, 10, 0.15); color: var(--orange); }
+  .agent-icon.report_writer { background: rgba(52, 199, 89, 0.15); color: var(--green); }
+
+  .agent-body { flex: 1; min-width: 0; }
+
+  .agent-name {
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .agent-name.orchestrator { color: #9382ff; }
+  .agent-name.ingestion { color: var(--accent); }
+  .agent-name.analyst { color: var(--orange); }
+  .agent-name.report_writer { color: var(--green); }
+
+  .agent-detail {
+    font-size: 13px; color: var(--text);
+    line-height: 1.4;
+  }
+
+  .agent-status-icon {
+    flex-shrink: 0; width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .mini-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--accent); border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+
+  .check { color: var(--green); font-size: 16px; font-weight: 700; }
+
+  /* ── Report Display ────────────────── */
+  .report-display {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 16px;
+    line-height: 1.7;
+  }
+
+  .report-display.visible { display: block; }
+
+  .report-display h1 { font-size: 20px; margin: 20px 0 12px; color: var(--accent); }
+  .report-display h2 { font-size: 17px; margin: 18px 0 10px; color: var(--text); }
+  .report-display h3 { font-size: 15px; margin: 14px 0 8px; color: var(--text2); }
+  .report-display p { margin-bottom: 10px; }
+  .report-display ul, .report-display ol { margin: 8px 0 12px 24px; }
+  .report-display li { margin-bottom: 6px; }
+  .report-display strong { color: var(--accent); }
+  .report-display table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .report-display th, .report-display td {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    text-align: left;
+  }
+  .report-display th { background: var(--surface2); font-weight: 600; }
+
+  /* ── Games List ────────────────────── */
+  .game-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .game-row:hover { background: var(--surface2); }
+
+  .game-info { flex: 1; }
+  .game-opponent { font-weight: 600; font-size: 15px; }
+  .game-date { font-size: 13px; color: var(--text2); }
+  .game-score { font-weight: 700; font-size: 16px; padding: 4px 12px; border-radius: 6px; }
+  .game-score.win { background: rgba(52, 199, 89, 0.15); color: var(--green); }
+  .game-score.loss { background: rgba(255, 69, 58, 0.15); color: var(--red); }
+
+  /* ── Reports List ──────────────────── */
+  .report-row {
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .report-row:hover { background: var(--surface2); }
+  .report-type { font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1px; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
+  .report-type.postgame { background: rgba(79, 143, 247, 0.15); color: var(--accent); }
+  .report-type.scouting { background: rgba(255, 159, 10, 0.15); color: var(--orange); }
+  .report-type.pregame { background: rgba(52, 199, 89, 0.15); color: var(--green); }
+  .report-type.research { background: rgba(0, 199, 190, 0.15); color: #00c7be; }
+  .report-type.league_standings { background: rgba(147, 130, 255, 0.15); color: #9382ff; }
+  .report-type.team_identity { background: rgba(79, 143, 247, 0.15); color: var(--accent); }
+
+  /* ── Scouting Page ─────────────────── */
+  .opponent-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+
+  .opponent-name { font-weight: 600; font-size: 15px; }
+  .opponent-record { font-size: 13px; color: var(--text2); }
+
+  /* ── Empty State ───────────────────── */
+  .empty {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text2);
+  }
+
+  .empty .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty p { font-size: 15px; }
+
+  /* ── Responsive ────────────────────── */
+  @media (max-width: 600px) {
+    .nav-tabs { gap: 2px; }
+    .nav-tab { padding: 6px 10px; font-size: 12px; }
+    nav h1 { font-size: 17px; }
+    .page { padding: 14px; }
+  }
+
+  /* ── Print Styles ──────────────────── */
+  @media print {
+    body { background: #fff !important; color: #000 !important; }
+    nav { display: none !important; }
+    .card, .upload-zone, .status, .agent-progress,
+    .nav-tabs, .game-row, .report-row, .opponent-card,
+    textarea, input, select, button,
+    #opp-players-section, #opponents-list,
+    #agent-progress, #scout-agent-progress { display: none !important; }
+
+    /* Show the active page but hide non-report content inside it */
+    .page { padding: 0 !important; }
+    .page .card { display: none !important; }
+
+    .report-display {
+      display: block !important;
+      border: none !important;
+      background: #fff !important;
+      color: #000 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      font-size: 12pt;
+      line-height: 1.5;
+    }
+    .report-display.visible { display: block !important; }
+    .report-display h1 { color: #000 !important; font-size: 18pt; }
+    .report-display h2 { color: #333 !important; font-size: 14pt; }
+    .report-display h3 { color: #555 !important; font-size: 12pt; }
+    .report-display p, .report-display li { color: #000 !important; }
+    .report-display strong { color: #000 !important; }
+    .report-display table { border-color: #ccc !important; }
+    .report-display th { background: #f0f0f0 !important; color: #000 !important; }
+    .report-display td { color: #000 !important; border-color: #ccc !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <h1>Coach<span>GPT</span></h1>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('new-game')">New Game</button>
+    <button class="nav-tab" onclick="showPage('team')">Team</button>
+    <button class="nav-tab" onclick="showPage('league')">League</button>
+    <button class="nav-tab" onclick="showPage('games')">Games</button>
+    <button class="nav-tab" onclick="showPage('reports')">Reports</button>
+    <button class="nav-tab" onclick="showPage('scout')">Scout</button>
+    <button class="nav-tab" onclick="showPage('guide')">Guide</button>
+  </div>
+  <div id="user-status" style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);">
+    <span id="user-name"></span>
+    <a id="sign-out-link" href="/logout" style="display:none;color:var(--red);text-decoration:none;font-weight:500;padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;">Sign Out</a>
+  </div>
+</nav>
+
+<!-- ════════════ NEW GAME PAGE ════════════ -->
+<div id="page-new-game" class="page active">
+
+  <!-- Your Team (persistent) -->
+  <div class="card" style="margin-bottom:12px; padding:12px 20px; display:flex; align-items:center; gap:12px;">
+    <label style="margin:0; white-space:nowrap;">YOUR TEAM</label>
+    <input type="text" id="my-team" placeholder="e.g. Maryland Sting 2031 - Peay" style="margin:0; flex:1;">
+  </div>
+
+  <!-- Game Details -->
+  <div class="card">
+    <h2>Game Details</h2>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <label>Opponent</label>
+        <input type="text" id="game-opponent" placeholder="e.g. Emmorton Eagles" style="margin-bottom:8px;">
+      </div>
+      <div>
+        <label>Date</label>
+        <input type="date" id="game-date" style="margin-bottom:8px;">
+      </div>
+    </div>
+
+    <!-- Score Entry -->
+    <label>Score</label>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:11px; color:var(--text2); margin-bottom:4px;">US</div>
+        <input type="number" id="game-our-score" placeholder="0" style="margin:0; text-align:center; font-size:28px; font-weight:800; padding:12px; color:var(--accent);">
+      </div>
+      <div style="font-size:24px; font-weight:700; color:var(--text2);">-</div>
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:11px; color:var(--text2); margin-bottom:4px;">THEM</div>
+        <input type="number" id="game-opp-score" placeholder="0" style="margin:0; text-align:center; font-size:28px; font-weight:800; padding:12px; color:var(--red);">
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <label>Location</label>
+        <input type="text" id="game-location" placeholder="e.g. Meadowbrook Athletic Complex" style="margin-bottom:8px;">
+      </div>
+      <div>
+        <label>Game Type</label>
+        <select id="game-type" style="margin-bottom:8px;">
+          <option value="league">League</option>
+          <option value="tournament">Tournament</option>
+          <option value="scrimmage">Scrimmage</option>
+          <option value="playoff">Playoff</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Box Score Upload -->
+  <div class="card">
+    <h2>Box Score</h2>
+    <p style="color:var(--text2); font-size:13px; margin-bottom:12px;">Optional — upload for player-level stats. Skip if you only have notes.</p>
+
+    <div class="upload-zone" id="upload-zone">
+      <div class="icon">+</div>
+      <p>Upload box score</p>
+      <p style="font-size:11px; color:var(--text2); margin-top:4px;">GameChanger PDF, screenshot, CSV, or text file</p>
+      <div class="filename" id="file-name"></div>
+      <input type="file" id="file-input" accept=".pdf,.csv,.txt,.png,.jpg,.jpeg,.webp">
+    </div>
+  </div>
+
+  <!-- Coach Notes -->
+  <div class="card">
+    <h2>Coach Notes</h2>
+    <p style="color:var(--text2); font-size:13px; margin-bottom:12px;">The more detail you give, the better the report. Use jersey numbers.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
+        <label>What Did They Run?</label>
+        <textarea id="notes-opponent" placeholder="2-3 zone&#10;Triangle offense&#10;3-2 press&#10;Press break: pass to corner, over the top" style="min-height:80px;"></textarea>
+      </div>
+      <div>
+        <label>Opponent Player Tendencies</label>
+        <textarea id="notes-players" placeholder="#1 can shoot, scored most points&#10;#10 can't handle pressure&#10;#7 best player, controls boards&#10;#13 likes to drive, make him shoot" style="min-height:80px;"></textarea>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
+        <label>What Worked?</label>
+        <textarea id="notes-worked" placeholder="Full court press in Q3&#10;Baseline drives broke their zone&#10;Transition off steals" style="min-height:80px;"></textarea>
+      </div>
+      <div>
+        <label>What Didn't Work?</label>
+        <textarea id="notes-didnt" placeholder="Too many turnovers&#10;Didn't match their intensity&#10;Three point shooting was off" style="min-height:80px;"></textarea>
+      </div>
+    </div>
+
+    <label>Additional Notes</label>
+    <textarea id="notes-extra" placeholder="Any other observations, key plays, adjustments..." style="min-height:60px;"></textarea>
+  </div>
+
+  <!-- Submit -->
+  <div class="card">
+    <div id="game-status" class="status"></div>
+
+    <div class="agent-progress" id="agent-progress">
+      <div class="agent-step" id="step-orchestrator">
+        <div class="agent-icon orchestrator">O</div>
+        <div class="agent-body">
+          <div class="agent-name orchestrator">Orchestrator</div>
+          <div class="agent-detail" id="detail-orchestrator">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="status-orchestrator"></div>
+      </div>
+      <div class="agent-step" id="step-ingestion">
+        <div class="agent-icon ingestion">I</div>
+        <div class="agent-body">
+          <div class="agent-name ingestion">Ingestion Agent</div>
+          <div class="agent-detail" id="detail-ingestion">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="status-ingestion"></div>
+      </div>
+      <div class="agent-step" id="step-analyst">
+        <div class="agent-icon analyst">A</div>
+        <div class="agent-body">
+          <div class="agent-name analyst">Game Analyst</div>
+          <div class="agent-detail" id="detail-analyst">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="status-analyst"></div>
+      </div>
+      <div class="agent-step" id="step-report_writer">
+        <div class="agent-icon report_writer">R</div>
+        <div class="agent-body">
+          <div class="agent-name report_writer">Report Writer</div>
+          <div class="agent-detail" id="detail-report_writer">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="status-report_writer"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="submit-btn" onclick="submitGame()">
+      Process Game
+    </button>
+  </div>
+
+  <div class="report-display" id="game-report"></div>
+
+</div>
+
+<!-- ════════════ TEAM PAGE ════════════ -->
+<div id="page-team" class="page">
+
+  <div class="card">
+    <h2>Import Season Stats</h2>
+    <p style="color:var(--text2); font-size:13px; margin-bottom:16px;">Upload a GameChanger season CSV export. Players persist across seasons — new players are added, returning players keep their history.</p>
+
+    <div style="display:flex; gap:12px; margin-bottom:12px;">
+      <div style="flex:1;">
+        <label>Season Name</label>
+        <input type="text" id="season-name" placeholder="e.g. Fall 2025">
+      </div>
+      <div style="flex:1;">
+        <label>Team Name</label>
+        <input type="text" id="season-team" placeholder="e.g. Maryland Sting - Peay 2031 13U">
+      </div>
+    </div>
+
+    <div class="upload-zone" id="season-upload-zone" style="margin-bottom:12px;">
+      <div class="icon">+</div>
+      <p>Upload GameChanger Season CSV</p>
+      <div class="filename" id="season-file-name"></div>
+      <input type="file" id="season-file-input" accept=".csv">
+    </div>
+
+    <div id="import-status" class="status"></div>
+
+    <button class="btn btn-primary" onclick="importSeason()">Import Season</button>
+  </div>
+
+  <!-- Season selector -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px;">
+    <h2>Season</h2>
+    <select id="season-select" onchange="displaySeason(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px;">
+      <option value="">— Select Season —</option>
+    </select>
+  </div>
+
+  <!-- Season data display -->
+  <div id="season-data" style="display:none;">
+
+    <div class="card" id="team-summary-card">
+      <h2 id="team-summary-title">Team Summary</h2>
+      <div id="team-summary"></div>
+    </div>
+
+    <div style="margin:20px 0 12px; display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="font-size:14px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px;">Team Identity</h3>
+      <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" id="identity-btn" onclick="generateTeamIdentity()">Generate Report (~$0.05)</button>
+    </div>
+    <div id="identity-status" class="status"></div>
+    <div class="report-display" id="identity-report"></div>
+
+    <h3 style="font-size:14px; color:var(--text2); margin:20px 0 12px; text-transform:uppercase; letter-spacing:0.5px;">Roster</h3>
+    <div id="roster-list"></div>
+
+  </div>
+</div>
+
+<!-- ════════════ LEAGUE PAGE ════════════ -->
+<div id="page-league" class="page">
+
+  <div class="card">
+    <h2>Import League Standings</h2>
+    <p style="color:var(--text2); font-size:13px; margin-bottom:12px;">Paste standings from HCRPS or upload a webarchive/PDF of the schedule page.</p>
+
+    <label>Season / League Name</label>
+    <input type="text" id="league-season-name" placeholder="e.g. Winter 2025-2026 — 7th Grade Alliance">
+
+    <div class="upload-zone" id="league-upload-zone" style="margin-bottom:12px; padding:20px;">
+      <div class="icon">+</div>
+      <p>Upload HCRPS webarchive, schedule PDF, or text file</p>
+      <div class="filename" id="league-file-name"></div>
+      <input type="file" id="league-file-input" accept=".webarchive,.pdf,.txt,.csv">
+    </div>
+
+    <label>Or paste standings text</label>
+    <textarea id="league-text" placeholder="Paste standings here — from hcrpsports.org Select All → Copy → Paste." style="min-height:80px;"></textarea>
+
+    <div id="league-status" class="status"></div>
+    <button class="btn btn-primary" onclick="importLeague()">Import League Data</button>
+  </div>
+
+  <!-- League selector + display -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px;">
+    <h2>League Standings</h2>
+    <select id="league-select" onchange="displayLeague(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px;">
+      <option value="">— Select League —</option>
+    </select>
+  </div>
+
+  <div class="report-display" id="league-report"></div>
+
+</div>
+
+<!-- ════════════ GAMES LIST PAGE ════════════ -->
+<div id="page-games" class="page">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2>Games</h2>
+    <button class="btn btn-secondary" onclick="loadGames()" style="padding:8px 14px; font-size:13px;">Refresh</button>
+  </div>
+  <div id="games-list"></div>
+</div>
+
+<!-- ════════════ REPORTS PAGE ════════════ -->
+<div id="page-reports" class="page">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2>Reports</h2>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <select id="report-type-filter" onchange="loadReports()" style="width:auto; margin:0; padding:6px 10px; font-size:13px;">
+        <option value="">All Types</option>
+        <option value="postgame">Postgame</option>
+        <option value="scouting">Scouting</option>
+        <option value="pregame">Pre-Game</option>
+        <option value="research">Research</option>
+        <option value="league_standings">League</option>
+        <option value="team_identity">Team ID</option>
+      </select>
+      <button class="btn btn-secondary" onclick="loadReports()" style="padding:6px 14px; font-size:13px;">Refresh</button>
+    </div>
+  </div>
+  <div id="reports-list"></div>
+
+  <div class="report-display" id="report-viewer"></div>
+</div>
+
+<!-- ════════════ SCOUT PAGE ════════════ -->
+<div id="page-scout" class="page">
+  <div class="card">
+    <h2>Scout an Opponent</h2>
+    <label>Opponent Name</label>
+    <input type="text" id="scout-opponent" placeholder="e.g. Lincoln High">
+
+    <label style="margin-top:4px;">League / Context (optional)</label>
+    <input type="text" id="scout-league" placeholder="e.g. HCRPS basketball 13U, Howard County">
+
+    <div id="scout-status" class="status"></div>
+
+    <div class="agent-progress" id="scout-agent-progress">
+      <div class="agent-step" id="scout-step-orchestrator">
+        <div class="agent-icon orchestrator">O</div>
+        <div class="agent-body">
+          <div class="agent-name orchestrator">Orchestrator</div>
+          <div class="agent-detail" id="scout-detail-orchestrator">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="scout-status-orchestrator"></div>
+      </div>
+      <div class="agent-step" id="scout-step-researcher">
+        <div class="agent-icon" style="background:rgba(0,199,190,0.15);color:#00c7be;">W</div>
+        <div class="agent-body">
+          <div class="agent-name" style="color:#00c7be;">Research Agent</div>
+          <div class="agent-detail" id="scout-detail-researcher">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="scout-status-researcher"></div>
+      </div>
+      <div class="agent-step" id="scout-step-analyst">
+        <div class="agent-icon analyst">A</div>
+        <div class="agent-body">
+          <div class="agent-name analyst">Game Analyst</div>
+          <div class="agent-detail" id="scout-detail-analyst">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="scout-status-analyst"></div>
+      </div>
+      <div class="agent-step" id="scout-step-report_writer">
+        <div class="agent-icon report_writer">R</div>
+        <div class="agent-body">
+          <div class="agent-name report_writer">Report Writer</div>
+          <div class="agent-detail" id="scout-detail-report_writer">Waiting...</div>
+        </div>
+        <div class="agent-status-icon" id="scout-status-report_writer"></div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="scoutOpponent()">Scout (from our games)</button>
+      <button class="btn" style="flex:1; background:#00c7be; color:#000; font-weight:600;" onclick="researchOpponent()">Research (web lookup)</button>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;">
+    <h3 style="font-size:14px; color:var(--text2); margin-bottom:12px;">OPPONENTS IN DATABASE</h3>
+    <div id="opponents-list"></div>
+  </div>
+
+  <!-- Opponent Player Cards -->
+  <div id="opp-players-section" style="margin-top:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="font-size:14px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px;">OPPONENT PLAYER SCOUTING</h3>
+      <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="toggleAddPlayer()">+ Add Player</button>
+    </div>
+
+    <!-- Quick add form (hidden by default) -->
+    <div id="add-player-form" class="card" style="display:none; margin-bottom:12px; padding:14px;">
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <div style="flex:1;">
+          <label style="font-size:11px;">Opponent Team</label>
+          <input type="text" id="add-player-opponent" placeholder="e.g. Emmorton Eagles" style="margin:0;">
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <div style="width:80px;">
+          <label style="font-size:11px;">Jersey #</label>
+          <input type="text" id="add-player-number" placeholder="#" style="margin:0;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:11px;">Name (optional)</label>
+          <input type="text" id="add-player-name" placeholder="Name" style="margin:0;">
+        </div>
+      </div>
+      <label style="font-size:11px;">Tendencies (one per line)</label>
+      <textarea id="add-player-tendencies" placeholder="Can shoot from deep&#10;Weak going left&#10;Their primary ball handler" style="min-height:60px; margin-bottom:8px;"></textarea>
+      <button class="btn btn-primary" style="padding:8px 16px; font-size:13px; width:auto;" onclick="saveNewPlayer()">Save Player</button>
+      <div id="add-player-status" style="font-size:12px; color:var(--text2); margin-top:4px;"></div>
+    </div>
+
+    <div id="opp-players-list"><p style="color:var(--text2); font-size:13px;">No opponent players scouted yet. Process a game with coach notes or add manually above.</p></div>
+  </div>
+
+  <div class="report-display" id="scout-report"></div>
+</div>
+
+<!-- ════════════ GUIDE PAGE ════════════ -->
+<div id="page-guide" class="page">
+  <div id="guide-content" class="report-display visible" style="display:block;"></div>
+</div>
+
+<script>
+// ── User Status ────────────────────────
+(async () => {
+  try {
+    const res = await fetch('/api/me');
+    const data = await res.json();
+    const nameEl = document.getElementById('user-name');
+    const signOutEl = document.getElementById('sign-out-link');
+    if (data.signed_in) {
+      nameEl.textContent = data.display_name;
+      nameEl.style.color = 'var(--green)';
+      signOutEl.style.display = 'inline-block';
+    }
+  } catch(e) {}
+})();
+
+// ── Team Name Persistence ───────────────
+const myTeamInput = document.getElementById('my-team');
+myTeamInput.value = localStorage.getItem('coachgpt_team') || '';
+myTeamInput.addEventListener('input', () => {
+  localStorage.setItem('coachgpt_team', myTeamInput.value);
+});
+
+// ── Default Date to Today ───────────────
+document.getElementById('game-date').value = new Date().toISOString().split('T')[0];
+
+// ── Navigation ──────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+
+  if (name === 'team') loadSeasons();
+  if (name === 'league') loadLeagues();
+  if (name === 'games') loadGames();
+  if (name === 'reports') loadReports();
+  if (name === 'scout') loadOpponents();
+  if (name === 'guide') loadGuide();
+}
+
+// ── File Upload ─────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+const fileName = document.getElementById('file-name');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) {
+    fileName.textContent = fileInput.files[0].name;
+  }
+});
+
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+  uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    fileInput.files = e.dataTransfer.files;
+    fileName.textContent = e.dataTransfer.files[0].name;
+  }
+});
+
+// ── Agent Progress Helpers ──────────────
+function resetProgress() {
+  const progress = document.getElementById('agent-progress');
+  progress.classList.remove('visible');
+  ['orchestrator', 'ingestion', 'analyst', 'report_writer'].forEach(agent => {
+    document.getElementById('step-' + agent).className = 'agent-step';
+    document.getElementById('detail-' + agent).textContent = 'Waiting...';
+    document.getElementById('status-' + agent).innerHTML = '';
+  });
+}
+
+function updateAgent(agent, step, detail) {
+  const stepEl = document.getElementById('step-' + agent);
+  const detailEl = document.getElementById('detail-' + agent);
+  const statusEl = document.getElementById('status-' + agent);
+  if (!stepEl) return;
+
+  document.getElementById('agent-progress').classList.add('visible');
+
+  if (step === 'working' || step === 'start' || step === 'routing' || step === 'storing' || step === 'stored') {
+    stepEl.className = 'agent-step active';
+    statusEl.innerHTML = '<div class="mini-spinner"></div>';
+  }
+
+  if (step === 'done' || step === 'complete') {
+    stepEl.className = 'agent-step done';
+    statusEl.innerHTML = '<span class="check">&#10003;</span>';
+  }
+
+  detailEl.textContent = detail;
+}
+
+// ── Submit Game (SSE Streaming) ─────────
+async function submitGame() {
+  const statusEl = document.getElementById('game-status');
+  const reportEl = document.getElementById('game-report');
+  const submitBtn = document.getElementById('submit-btn');
+
+  // Collect structured fields
+  const myTeam = document.getElementById('my-team').value.trim();
+  const opponent = document.getElementById('game-opponent').value.trim();
+  const date = document.getElementById('game-date').value;
+  const ourScore = document.getElementById('game-our-score').value;
+  const oppScore = document.getElementById('game-opp-score').value;
+  const location = document.getElementById('game-location').value.trim();
+  const gameType = document.getElementById('game-type').value;
+
+  // Collect notes from all fields
+  const notesOpponent = document.getElementById('notes-opponent').value.trim();
+  const notesPlayers = document.getElementById('notes-players').value.trim();
+  const notesWorked = document.getElementById('notes-worked').value.trim();
+  const notesDidnt = document.getElementById('notes-didnt').value.trim();
+  const notesExtra = document.getElementById('notes-extra').value.trim();
+
+  // Build metadata string
+  let metadata = '';
+  if (myTeam) metadata += `Our team is: ${myTeam}. `;
+  if (opponent) metadata += `Opponent: ${opponent}. `;
+  if (date) metadata += `Date: ${date}. `;
+  if (ourScore && oppScore) {
+    const result = parseInt(ourScore) > parseInt(oppScore) ? 'W' : parseInt(ourScore) < parseInt(oppScore) ? 'L' : 'T';
+    metadata += `Score: ${ourScore}-${oppScore} (${result}). `;
+  }
+  if (location) metadata += `Location: ${location}. `;
+  if (gameType) metadata += `Game type: ${gameType}. `;
+
+  // Build combined notes
+  let notes = '';
+  if (notesOpponent) notes += `What they ran:\n${notesOpponent}\n\n`;
+  if (notesPlayers) notes += `Opponent player tendencies:\n${notesPlayers}\n\n`;
+  if (notesWorked) notes += `What worked:\n${notesWorked}\n\n`;
+  if (notesDidnt) notes += `What didn't work:\n${notesDidnt}\n\n`;
+  if (notesExtra) notes += `Additional notes:\n${notesExtra}\n\n`;
+
+  const file = fileInput.files[0];
+
+  if (!notes.trim() && !metadata.trim() && !file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Enter game details, upload a file, or add notes.';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  resetProgress();
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span> Agents working...';
+  reportEl.classList.remove('visible');
+
+  const formData = new FormData();
+  formData.append('notes', notes);
+  formData.append('metadata', metadata);
+  if (file) formData.append('file', file);
+
+  try {
+    const resp = await fetch('/api/game/stream', { method: 'POST', body: formData });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const json_str = line.slice(6);
+        if (!json_str) continue;
+
+        try {
+          const data = JSON.parse(json_str);
+
+          if (data.agent) {
+            updateAgent(data.agent, data.step, data.detail);
+          }
+
+          if (data.result) {
+            statusEl.className = 'status success';
+            statusEl.textContent = `Game processed: ${data.result.opponent} (${data.result.date}) — ${data.result.result}`;
+
+            // Show report + post-game follow-up prompts
+            let postGame = `
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+                <h3 style="font-size:14px;color:var(--orange);margin-bottom:10px;">POST-GAME FOLLOW-UP</h3>
+                <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Add this info to strengthen future scouting reports:</p>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <label style="font-size:12px;margin:0;">GameChanger Recap Link</label>
+                  <input type="text" id="postgame-gc-link" placeholder="web.gc.com/teams/VGbwJULEMkSE/schedule/.../recap" style="margin-bottom:8px;">
+                  <label style="font-size:12px;margin:0;">Opponent Player Tendencies (use jersey #)</label>
+                  <textarea id="postgame-tendencies" placeholder="#10 couldn't handle pressure&#10;#7 dominated the boards&#10;#1 is their best shooter" style="min-height:60px;margin-bottom:8px;"></textarea>
+                  <label style="font-size:12px;margin:0;">What Adjustments for Next Time?</label>
+                  <textarea id="postgame-adjustments" placeholder="Start in press from Q1&#10;Force them left&#10;Box out #7 every possession" style="min-height:60px;margin-bottom:8px;"></textarea>
+                  <button class="btn btn-secondary" style="align-self:flex-start;" onclick="savePostgameNotes('${data.result.game_id}', '${data.result.opponent}', '${data.result.date}')">Save Follow-Up Notes</button>
+                  <div id="postgame-save-status" style="font-size:12px;color:var(--text2);"></div>
+                </div>
+              </div>`;
+
+            reportEl.innerHTML = postGame + markdownToHtml(data.result.report_text);
+            reportEl.classList.add('visible');
+
+            // Clear form
+            document.getElementById('game-opponent').value = '';
+            document.getElementById('game-our-score').value = '';
+            document.getElementById('game-opp-score').value = '';
+            document.getElementById('game-location').value = '';
+            document.getElementById('notes-opponent').value = '';
+            document.getElementById('notes-players').value = '';
+            document.getElementById('notes-worked').value = '';
+            document.getElementById('notes-didnt').value = '';
+            document.getElementById('notes-extra').value = '';
+            fileInput.value = '';
+            fileName.textContent = '';
+          }
+
+          if (data.error) {
+            statusEl.className = 'status error';
+            statusEl.textContent = 'Error: ' + data.error;
+          }
+        } catch (e) { /* skip parse errors */ }
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Network error: ' + err.message;
+  }
+
+  submitBtn.disabled = false;
+}
+
+// ── Load Games ──────────────────────────
+async function loadGames() {
+  const container = document.getElementById('games-list');
+  container.innerHTML = '<div class="empty"><p>Loading...</p></div>';
+
+  try {
+    const resp = await fetch('/api/games');
+    const games = await resp.json();
+
+    if (games.length === 0) {
+      container.innerHTML = '<div class="empty"><div class="icon">0</div><p>No games yet. Process your first game above.</p></div>';
+      return;
+    }
+
+    container.innerHTML = games.map(g => {
+      const score = `${g.our_score || '?'}-${g.opp_score || '?'}`;
+      const cls = g.result === 'W' ? 'win' : g.result === 'L' ? 'loss' : '';
+      return `
+        <div class="game-row" onclick="viewGame('${g.id}')">
+          <div class="game-info">
+            <div class="game-opponent">vs ${g.opponent}</div>
+            <div class="game-date">${g.date}${g.location ? ' — ' + g.location : ''}</div>
+          </div>
+          <div class="game-score ${cls}">${score} ${g.result || ''}</div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="empty"><p>Error loading games: ${err.message}</p></div>`;
+  }
+}
+
+// ── View Game Detail ────────────────────
+async function viewGame(gameId) {
+  try {
+    const resp = await fetch(`/api/game/${gameId}`);
+    const data = await resp.json();
+
+    const reports = await fetch(`/api/reports?game_id=${gameId}`).then(r => r.json()).catch(() => []);
+    const report = reports.find(r => r.game_id === gameId);
+
+    let html = `<h2>vs ${data.game.opponent} — ${data.game.date}</h2>`;
+    html += `<p>Score: ${data.game.our_score || '?'}-${data.game.opp_score || '?'} (${data.game.result || '?'})</p>`;
+
+    if (data.observations && data.observations.length > 0) {
+      html += '<h3>Observations</h3><ul>';
+      data.observations.forEach(o => {
+        const q = o.quarter ? `[${o.quarter}] ` : '';
+        html += `<li><strong>${o.category}:</strong> ${q}${o.detail}</li>`;
+      });
+      html += '</ul>';
+    }
+
+    if (report && report.report_text) {
+      html += '<hr style="border-color:var(--border); margin:20px 0;">';
+      html += markdownToHtml(report.report_text);
+    }
+
+    // Show in a modal-like display on games page
+    const viewer = document.getElementById('report-viewer') || document.createElement('div');
+    viewer.innerHTML = html;
+    viewer.className = 'report-display visible';
+    document.getElementById('page-games').appendChild(viewer);
+
+  } catch (err) {
+    alert('Error loading game: ' + err.message);
+  }
+}
+
+// ── Load Reports ────────────────────────
+async function loadReports() {
+  const container = document.getElementById('reports-list');
+  container.innerHTML = '<div class="empty"><p>Loading...</p></div>';
+
+  try {
+    const filterEl = document.getElementById('report-type-filter');
+    const typeFilter = filterEl ? filterEl.value : '';
+    const url = typeFilter ? `/api/reports?report_type=${typeFilter}` : '/api/reports';
+    const resp = await fetch(url);
+    const reports = await resp.json();
+
+    if (reports.length === 0) {
+      container.innerHTML = '<div class="empty"><div class="icon">0</div><p>No reports yet.</p></div>';
+      return;
+    }
+
+    // Store reports for click access
+    window._reportCache = {};
+    reports.forEach(r => { window._reportCache[r.id] = r.report_text || ''; });
+
+    const typeLabels = {
+      'postgame': 'POSTGAME',
+      'scouting': 'SCOUTING',
+      'pregame': 'PRE-GAME',
+      'research': 'RESEARCH',
+      'league_standings': 'LEAGUE',
+      'team_identity': 'TEAM ID',
+    };
+
+    container.innerHTML = reports.map(r => `
+      <div class="report-row" onclick="viewReportById('${r.id}')">
+        <span class="report-type ${r.report_type}">${typeLabels[r.report_type] || r.report_type}</span>
+        <div style="font-weight:600;">${r.opponent || 'Unknown'}</div>
+        <div style="font-size:13px; color:var(--text2);">${r.created_at}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="empty"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+function viewReportById(id) {
+  const viewer = document.getElementById('report-viewer');
+  const text = (window._reportCache && window._reportCache[id]) || '';
+  viewer.innerHTML = copyButtonHtml(text) + markdownToHtml(text);
+  viewer.classList.add('visible');
+  viewer.scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyButtonHtml(rawText) {
+  const escaped = rawText.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+  return `<div style="display:flex;gap:8px;margin-bottom:12px;">
+    <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="copyReport('${escaped}')">Copy Report</button>
+    <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="window.print()">Print</button>
+  </div>`;
+}
+
+function copyReport(text) {
+  const decoded = text.replace(/\\n/g, '\n').replace(/\\'/g, "'");
+  navigator.clipboard.writeText(decoded).then(() => {
+    event.target.textContent = 'Copied!';
+    setTimeout(() => { event.target.textContent = 'Copy Report'; }, 2000);
+  });
+}
+
+// ── Scout Opponent ──────────────────────
+async function loadOpponents() {
+  const container = document.getElementById('opponents-list');
+  try {
+    const resp = await fetch('/api/opponents');
+    const opponents = await resp.json();
+
+    if (opponents.length === 0) {
+      container.innerHTML = '<div class="empty"><p>No opponents yet. Process games first.</p></div>';
+      return;
+    }
+
+    container.innerHTML = opponents.map(o => `
+      <div class="opponent-card">
+        <div class="opponent-name" style="cursor:pointer;" onclick="selectOpponent('${o}')">${o}</div>
+        <div style="display:flex; gap:4px;">
+          <button class="btn btn-scout" onclick="scoutDirect('${o}')">Scout</button>
+          <button class="btn" style="background:var(--green);color:#000;padding:8px 12px;font-size:12px;font-weight:600;" onclick="pregameDirect('${o}')">Pre-Game</button>
+          <button class="btn" style="background:#00c7be;color:#000;padding:8px 12px;font-size:12px;font-weight:600;" onclick="researchDirect('${o}')">Research</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = '';
+  }
+}
+
+function selectOpponent(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  document.getElementById('add-player-opponent').value = opponent;
+  loadOpponentPlayers(opponent);
+}
+
+function scoutDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  loadOpponentPlayers(opponent);
+  scoutOpponent();
+}
+
+function pregameDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  generatePregame(opponent);
+}
+
+function researchDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  researchOpponent();
+}
+
+async function generatePregame(opponent) {
+  if (!opponent) {
+    opponent = document.getElementById('scout-opponent').value.trim();
+  }
+  if (!opponent) return;
+
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Reset progress — show analyst, hide researcher (not used in pregame)
+  progressEl.classList.remove('visible');
+  ['orchestrator', 'researcher', 'analyst', 'report_writer'].forEach(agent => {
+    const el = document.getElementById('scout-step-' + agent);
+    if (el) {
+      el.className = 'agent-step';
+      if (agent === 'researcher') el.style.display = 'none';
+      else el.style.display = '';
+    }
+    const d = document.getElementById('scout-detail-' + agent);
+    if (d) d.textContent = 'Waiting...';
+    const s = document.getElementById('scout-status-' + agent);
+    if (s) s.innerHTML = '';
+  });
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span> Generating pre-game brief for ${opponent}...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/pregame/${encodeURIComponent(opponent)}/stream`, { method: 'POST' });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+
+          if (data.agent) {
+            const stepEl = document.getElementById('scout-step-' + data.agent);
+            const detailEl = document.getElementById('scout-detail-' + data.agent);
+            const statusIcon = document.getElementById('scout-status-' + data.agent);
+            if (stepEl) {
+              progressEl.classList.add('visible');
+              if (data.step === 'done' || data.step === 'complete') {
+                stepEl.className = 'agent-step done';
+                statusIcon.innerHTML = '<span class="check">&#10003;</span>';
+              } else {
+                stepEl.className = 'agent-step active';
+                statusIcon.innerHTML = '<div class="mini-spinner"></div>';
+              }
+              detailEl.textContent = data.detail;
+            }
+          }
+
+          if (data.result) {
+            statusEl.className = 'status success';
+            statusEl.textContent = `Pre-game brief ready: ${data.result.games_analyzed} game(s) analyzed.`;
+            reportEl.innerHTML = copyButtonHtml(data.result.report_text) + markdownToHtml(data.result.report_text);
+            reportEl.classList.add('visible');
+          }
+
+          if (data.error) {
+            statusEl.className = 'status error';
+            statusEl.textContent = data.error;
+          }
+        } catch (e) { }
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function scoutOpponent() {
+  const opponent = document.getElementById('scout-opponent').value.trim();
+  if (!opponent) return;
+
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Reset scout progress — show analyst, hide researcher (not used in scout)
+  progressEl.classList.remove('visible');
+  ['orchestrator', 'researcher', 'analyst', 'report_writer'].forEach(agent => {
+    const el = document.getElementById('scout-step-' + agent);
+    if (el) {
+      el.className = 'agent-step';
+      if (agent === 'researcher') el.style.display = 'none';
+      else el.style.display = '';
+    }
+    const d = document.getElementById('scout-detail-' + agent);
+    if (d) d.textContent = 'Waiting...';
+    const s = document.getElementById('scout-status-' + agent);
+    if (s) s.innerHTML = '';
+  });
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span> Scouting ${opponent}...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/scout/${encodeURIComponent(opponent)}/stream`, { method: 'POST' });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+
+          if (data.agent) {
+            const stepEl = document.getElementById('scout-step-' + data.agent);
+            const detailEl = document.getElementById('scout-detail-' + data.agent);
+            const statusIcon = document.getElementById('scout-status-' + data.agent);
+            if (stepEl) {
+              progressEl.classList.add('visible');
+              if (data.step === 'done' || data.step === 'complete') {
+                stepEl.className = 'agent-step done';
+                statusIcon.innerHTML = '<span class="check">&#10003;</span>';
+              } else {
+                stepEl.className = 'agent-step active';
+                statusIcon.innerHTML = '<div class="mini-spinner"></div>';
+              }
+              detailEl.textContent = data.detail;
+            }
+          }
+
+          if (data.result) {
+            statusEl.className = 'status success';
+            statusEl.textContent = `Scouting report ready: ${data.result.games_analyzed} game(s) analyzed.`;
+            reportEl.innerHTML = copyButtonHtml(data.result.report_text) + markdownToHtml(data.result.report_text);
+            reportEl.classList.add('visible');
+          }
+
+          if (data.error) {
+            statusEl.className = 'status error';
+            statusEl.textContent = data.error;
+          }
+        } catch (e) { }
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── Research Opponent ────────────────────
+async function researchOpponent() {
+  const opponent = document.getElementById('scout-opponent').value.trim();
+  if (!opponent) return;
+
+  const league = document.getElementById('scout-league').value.trim();
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Reset progress — hide analyst (not used in research flow)
+  progressEl.classList.remove('visible');
+  ['orchestrator', 'researcher', 'analyst', 'report_writer'].forEach(agent => {
+    const el = document.getElementById('scout-step-' + agent);
+    if (el) {
+      el.className = 'agent-step';
+      // Hide analyst in research flow — it's not used
+      if (agent === 'analyst') el.style.display = 'none';
+      else el.style.display = '';
+    }
+    const d = document.getElementById('scout-detail-' + agent);
+    if (d) d.textContent = 'Waiting...';
+    const s = document.getElementById('scout-status-' + agent);
+    if (s) s.innerHTML = '';
+  });
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span> Researching ${opponent} online...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const url = `/api/research/${encodeURIComponent(opponent)}/stream${league ? '?league_info=' + encodeURIComponent(league) : ''}`;
+    const resp = await fetch(url, { method: 'POST' });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+
+          if (data.agent) {
+            const stepEl = document.getElementById('scout-step-' + data.agent);
+            const detailEl = document.getElementById('scout-detail-' + data.agent);
+            const statusIcon = document.getElementById('scout-status-' + data.agent);
+            if (stepEl) {
+              progressEl.classList.add('visible');
+              if (data.step === 'done' || data.step === 'complete') {
+                stepEl.className = 'agent-step done';
+                statusIcon.innerHTML = '<span class="check">&#10003;</span>';
+              } else {
+                stepEl.className = 'agent-step active';
+                statusIcon.innerHTML = '<div class="mini-spinner"></div>';
+              }
+              detailEl.textContent = data.detail;
+            }
+          }
+
+          if (data.result) {
+            statusEl.className = 'status success';
+            statusEl.textContent = `Research complete for ${opponent}`;
+            reportEl.innerHTML = copyButtonHtml(data.result.report_text) + markdownToHtml(data.result.report_text);
+            reportEl.classList.add('visible');
+          }
+
+          if (data.error) {
+            statusEl.className = 'status error';
+            statusEl.textContent = data.error;
+          }
+        } catch (e) { }
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── League Import ───────────────────────
+const leagueFileInput = document.getElementById('league-file-input');
+const leagueFileName = document.getElementById('league-file-name');
+leagueFileInput.addEventListener('change', () => {
+  if (leagueFileInput.files.length > 0) {
+    leagueFileName.textContent = leagueFileInput.files[0].name;
+  }
+});
+
+async function importLeague() {
+  const text = document.getElementById('league-text').value.trim();
+  const file = leagueFileInput.files[0];
+  const statusEl = document.getElementById('league-status');
+  const reportEl = document.getElementById('league-report');
+  const myTeam = localStorage.getItem('coachgpt_team') || '';
+
+  if (!text && !file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Paste standings or upload a file first.';
+    return;
+  }
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span> Parsing league data...';
+  reportEl.classList.remove('visible');
+
+  const leagueSeasonName = document.getElementById('league-season-name').value.trim();
+
+  const formData = new FormData();
+  formData.append('standings_text', text);
+  formData.append('team_name', myTeam);
+  formData.append('season_name', leagueSeasonName);
+  if (file) formData.append('file', file);
+
+  try {
+    const resp = await fetch('/api/league/import', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+      return;
+    }
+
+    statusEl.className = 'status success';
+    statusEl.textContent = `Parsed ${data.teams_count} teams. ${data.our_team ? 'You are #' + data.our_team.rank : ''}`;
+
+    // Refresh the league dropdown
+    await loadLeagues();
+
+    // Build the standings display
+    let html = `<h2>${data.league_name || 'League Standings'}</h2>`;
+    if (data.division) html += `<p style="color:var(--text2);">${data.division}</p>`;
+
+    // Standings table
+    html += '<table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th></tr></thead><tbody>';
+    data.teams.forEach(t => {
+      const isUs = t.is_us ? 'style="background:rgba(79,143,247,0.1);"' : '';
+      const marker = t.is_us ? ' ★' : '';
+      html += `<tr ${isUs}><td>${t.rank}</td><td><strong>${t.team}${marker}</strong></td><td>${t.record}</td><td>${t.ppg}</td><td>${t.papg}</td><td>${t.avg_margin > 0 ? '+' : ''}${t.avg_margin}</td></tr>`;
+    });
+    html += '</tbody></table>';
+
+    // Comparisons
+    if (data.comparisons && data.comparisons.length > 0) {
+      html += '<h2 style="margin-top:20px;">Matchup Projections</h2>';
+      html += '<table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
+      data.comparisons.forEach(c => {
+        const color = c.assessment === 'Strong favorite' ? 'var(--green)' :
+                      c.assessment === 'Favored' ? 'var(--accent)' :
+                      c.assessment === 'Toss-up' ? 'var(--orange)' :
+                      'var(--red)';
+        html += `<tr><td>${c.opponent}</td><td>${c.their_record}</td><td>${c.their_avg_margin > 0 ? '+' : ''}${c.their_avg_margin}</td><td>${c.our_margin_vs_theirs > 0 ? '+' : ''}${c.our_margin_vs_theirs}</td><td style="color:${color};font-weight:600;">${c.assessment}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    reportEl.innerHTML = html;
+    reportEl.classList.add('visible');
+
+    document.getElementById('league-text').value = '';
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── Team Identity ───────────────────────
+async function generateTeamIdentity() {
+  const select = document.getElementById('season-select');
+  const seasonId = select.value;
+  if (!seasonId) { alert('Select a season first.'); return; }
+
+  const statusEl = document.getElementById('identity-status');
+  const reportEl = document.getElementById('identity-report');
+  const btn = document.getElementById('identity-btn');
+
+  btn.disabled = true;
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span> Generating team identity report...';
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/season/${seasonId}/identity`, { method: 'POST' });
+    const data = await resp.json();
+
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+    } else {
+      statusEl.className = 'status success';
+      statusEl.textContent = 'Team identity report generated.';
+      reportEl.innerHTML = copyButtonHtml(data.report_text) + markdownToHtml(data.report_text);
+      reportEl.classList.add('visible');
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+  btn.disabled = false;
+}
+
+// ── League Selector ─────────────────────
+async function loadLeagues() {
+  try {
+    const resp = await fetch('/api/leagues');
+    const leagues = await resp.json();
+    const select = document.getElementById('league-select');
+
+    select.innerHTML = '<option value="">— Select League —</option>';
+    leagues.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = `${l.name} (${l.teams_count} teams)`;
+      select.appendChild(opt);
+    });
+
+    // Auto-select the most recent
+    if (leagues.length > 0) {
+      select.value = leagues[0].id;
+      displayLeague(leagues[0].id);
+    }
+  } catch (err) { }
+}
+
+async function displayLeague(leagueId) {
+  if (!leagueId) {
+    document.getElementById('league-report').classList.remove('visible');
+    return;
+  }
+
+  const reportEl = document.getElementById('league-report');
+
+  try {
+    const resp = await fetch(`/api/league/${leagueId}`);
+    const data = await resp.json();
+
+    if (data.error || data.report_text) {
+      reportEl.innerHTML = markdownToHtml(data.report_text || 'No data');
+      reportEl.classList.add('visible');
+      return;
+    }
+
+    let html = `<h2>${data.league_name || 'League Standings'}</h2>`;
+
+    // Standings — clickable rows
+    const teams = data.teams || [];
+    const hasGames = teams.some(t => t.game_results && t.game_results.length > 0);
+
+    html += '<table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th>';
+    if (hasGames) html += '<th></th>';
+    html += '</tr></thead><tbody>';
+
+    teams.forEach((t, idx) => {
+      const isUs = t.is_us ? 'style="background:rgba(79,143,247,0.08);"' : '';
+      const marker = t.is_us ? ' ★' : '';
+      const expandBtn = hasGames ? `<td><button style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;" onclick="toggleTeamGames(${idx})">Games</button></td>` : '';
+
+      html += `<tr ${isUs}><td>${t.rank}</td><td><strong>${t.team}${marker}</strong></td><td>${t.record}</td><td>${t.ppg}</td><td>${t.papg}</td><td>${t.avg_margin > 0 ? '+' : ''}${t.avg_margin}</td>${expandBtn}</tr>`;
+
+      // Hidden game-by-game row
+      if (t.game_results && t.game_results.length > 0) {
+        html += `<tr id="team-games-${idx}" style="display:none;"><td colspan="${hasGames ? 7 : 6}" style="padding:0;">`;
+        html += `<div style="background:var(--surface2);padding:12px 16px;margin:4px 0;">`;
+        html += `<strong style="font-size:13px;color:var(--text2);">${t.team} — Game by Game</strong>`;
+        html += `<table style="margin-top:8px;font-size:13px;"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Margin</th></tr></thead><tbody>`;
+
+        t.game_results.forEach(g => {
+          const isVisitor = g.visitor === t.team;
+          const opp = isVisitor ? g.home : g.visitor;
+          const ourScore = isVisitor ? g.visitor_score : g.home_score;
+          const oppScore = isVisitor ? g.home_score : g.visitor_score;
+          const won = ourScore > oppScore;
+          const margin = ourScore - oppScore;
+          const color = won ? 'var(--green)' : 'var(--red)';
+
+          html += `<tr>`;
+          html += `<td style="white-space:nowrap;">${g.date || ''}</td>`;
+          html += `<td>${opp}</td>`;
+          html += `<td style="color:${color};font-weight:700;">${won ? 'W' : 'L'}</td>`;
+          html += `<td>${ourScore}-${oppScore}</td>`;
+          html += `<td style="color:${color};">${margin > 0 ? '+' : ''}${margin}</td>`;
+          html += `</tr>`;
+        });
+
+        html += '</tbody></table></div></td></tr>';
+      }
+    });
+    html += '</tbody></table>';
+
+    // Comparisons
+    if (data.comparisons && data.comparisons.length > 0) {
+      html += '<h2 style="margin-top:20px;">Matchup Projections</h2>';
+      html += '<table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
+      data.comparisons.forEach(c => {
+        const color = c.assessment === 'Strong favorite' ? 'var(--green)' :
+                      c.assessment === 'Favored' ? 'var(--accent)' :
+                      c.assessment === 'Toss-up' ? 'var(--orange)' :
+                      'var(--red)';
+        html += `<tr><td>${c.opponent}</td><td>${c.their_record}</td><td>${c.their_avg_margin > 0 ? '+' : ''}${c.their_avg_margin}</td><td>${c.our_margin_vs_theirs > 0 ? '+' : ''}${c.our_margin_vs_theirs}</td><td style="color:${color};font-weight:600;">${c.assessment}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    reportEl.innerHTML = html;
+    reportEl.classList.add('visible');
+  } catch (err) {
+    reportEl.innerHTML = `<p>Error loading league: ${err.message}</p>`;
+    reportEl.classList.add('visible');
+  }
+}
+
+function toggleTeamGames(idx) {
+  const row = document.getElementById('team-games-' + idx);
+  if (row) {
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+  }
+}
+
+// ── Season / Team ───────────────────────
+const seasonFileInput = document.getElementById('season-file-input');
+const seasonFileName = document.getElementById('season-file-name');
+
+seasonFileInput.addEventListener('change', () => {
+  if (seasonFileInput.files.length > 0) {
+    seasonFileName.textContent = seasonFileInput.files[0].name;
+  }
+});
+
+// Pre-fill season team name from localStorage
+const seasonTeamInput = document.getElementById('season-team');
+seasonTeamInput.value = localStorage.getItem('coachgpt_team') || '';
+
+async function importSeason() {
+  const statusEl = document.getElementById('import-status');
+  const file = seasonFileInput.files[0];
+  const seasonName = document.getElementById('season-name').value.trim();
+  const teamName = document.getElementById('season-team').value.trim();
+
+  if (!file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Please upload a CSV file.';
+    return;
+  }
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span> Importing season stats...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('season_name', seasonName || 'Imported Season');
+  formData.append('team_name', teamName || 'My Team');
+
+  try {
+    const resp = await fetch('/api/season/import', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+      return;
+    }
+
+    statusEl.className = 'status success';
+    statusEl.textContent = `Imported: ${data.players_imported} players, ${data.games_played} games (${data.season_name})`;
+
+    // Refresh dropdown and show the new season
+    await loadSeasons();
+    document.getElementById('season-select').value = data.season_id;
+    displaySeason(data.season_id);
+
+    seasonFileInput.value = '';
+    seasonFileName.textContent = '';
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function loadSeasons() {
+  try {
+    const resp = await fetch('/api/seasons');
+    const seasons = await resp.json();
+    const select = document.getElementById('season-select');
+
+    // Keep the default option, clear the rest
+    select.innerHTML = '<option value="">— Select Season —</option>';
+
+    seasons.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.name} — ${s.team_name} (${s.games_played} games)`;
+      select.appendChild(opt);
+    });
+
+    // Auto-select the most recent season
+    if (seasons.length > 0) {
+      select.value = seasons[0].id;
+      displaySeason(seasons[0].id);
+    }
+  } catch (err) { }
+}
+
+async function displaySeason(seasonId) {
+  try {
+    const resp = await fetch(`/api/season/${seasonId}`);
+    const data = await resp.json();
+    if (data.error) return;
+
+    const container = document.getElementById('season-data');
+    container.style.display = 'block';
+
+    const season = data.season;
+    const totals = data.team_totals;
+    const roster = data.roster;
+
+    // Team summary
+    document.getElementById('team-summary-title').textContent =
+      `${season.team_name} — ${season.name}`;
+
+    let summaryHtml = '';
+    if (totals) {
+      summaryHtml = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-top:12px;">
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700; color:var(--accent);">${totals.games_played}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">Games</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700; color:var(--green);">${totals.ppg}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">PPG</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.fg_pct * 100).toFixed(0)}%</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">FG%</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.three_pct * 100).toFixed(0)}%</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">3PT%</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.ft_pct * 100).toFixed(0)}%</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">FT%</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700; color:var(--red);">${(totals.turnovers / totals.games_played).toFixed(1)}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">TO/G</div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-top:8px;">
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.rebounds / totals.games_played).toFixed(1)}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">REB/G</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.assists / totals.games_played).toFixed(1)}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">AST/G</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700; color:var(--orange);">${(totals.steals / totals.games_played).toFixed(1)}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">STL/G</div>
+          </div>
+          <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+            <div style="font-size:24px; font-weight:700;">${(totals.blocks / totals.games_played).toFixed(1)}</div>
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase;">BLK/G</div>
+          </div>
+        </div>`;
+    }
+    document.getElementById('team-summary').innerHTML = summaryHtml;
+
+    // Roster cards — improved design
+    let rosterHtml = '';
+    const maxPpg = Math.max(...roster.map(p => p.ppg || 0), 1);
+
+    roster.forEach((p, i) => {
+      const roleColors = {
+        'Scorer': 'var(--green)', 'Playmaker': 'var(--accent)',
+        'Disruptor': 'var(--orange)', 'Rebounder': '#9382ff',
+        'Role Player': 'var(--text2)', 'Contributor': 'var(--text2)', 'Reserve': 'var(--text2)'
+      };
+
+      const roles = [];
+      if (p.ppg >= 8) roles.push('Scorer');
+      if (p.apg >= 3) roles.push('Playmaker');
+      if (p.spg >= 2) roles.push('Disruptor');
+      if (p.rpg >= 5) roles.push('Rebounder');
+      if (roles.length === 0 && p.games_played >= 15) roles.push(p.ppg < 3 ? 'Role Player' : 'Contributor');
+      if (p.games_played < 5) roles.push('Reserve');
+
+      const primaryRole = roles[0] || 'Player';
+      const primaryColor = roleColors[primaryRole] || 'var(--text2)';
+
+      const badges = roles.map(r =>
+        `<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 8px;border-radius:4px;background:${roleColors[r] || 'var(--text2)'}18;color:${roleColors[r] || 'var(--text2)'};">${r}</span>`
+      ).join(' ');
+
+      // Stat bar helper
+      const statBar = (label, value, max, color) => {
+        const pct = Math.min(100, (value / max) * 100);
+        return `<div style="margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+            <span style="color:var(--text2);">${label}</span>
+            <span style="font-weight:700;color:var(--text);">${value}</span>
+          </div>
+          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.3s;"></div>
+          </div>
+        </div>`;
+      };
+
+      rosterHtml += `
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:12px;">
+          <div style="display:flex;">
+            <!-- Number badge -->
+            <div style="width:64px;min-height:100%;background:${primaryColor}15;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 0;border-right:1px solid var(--border);">
+              <div style="font-size:28px;font-weight:800;color:${primaryColor};line-height:1;">#${p.number}</div>
+              <div style="font-size:10px;color:var(--text2);margin-top:4px;">${p.games_played} GP</div>
+            </div>
+            <!-- Content -->
+            <div style="flex:1;padding:14px 16px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                <div>
+                  <div style="font-size:17px;font-weight:700;">${p.first_name} ${p.last_name}</div>
+                  <div style="margin-top:4px;">${badges}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:24px;font-weight:800;color:${primaryColor};line-height:1;">${p.ppg}</div>
+                  <div style="font-size:10px;color:var(--text2);text-transform:uppercase;">PPG</div>
+                </div>
+              </div>
+              <!-- Stat bars -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+                ${statBar('Rebounds', p.rpg, 8, '#9382ff')}
+                ${statBar('Assists', p.apg, 5, 'var(--accent)')}
+                ${statBar('Steals', p.spg, 5, 'var(--orange)')}
+                ${statBar('Turnovers', p.topg, 5, 'var(--red)')}
+              </div>
+              <!-- Shooting -->
+              <div style="display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;">
+                <div style="flex:1;text-align:center;">
+                  <div style="font-size:18px;font-weight:700;color:var(--text);">${(p.fg_pct * 100).toFixed(0)}%</div>
+                  <div style="color:var(--text2);">FG</div>
+                  <div style="color:var(--text2);font-size:10px;">${p.fg_made}-${p.fg_attempted}</div>
+                </div>
+                <div style="flex:1;text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+                  <div style="font-size:18px;font-weight:700;color:${(p.three_pct * 100) >= 30 ? 'var(--green)' : (p.three_pct * 100) >= 20 ? 'var(--text)' : 'var(--red)'};">${(p.three_pct * 100).toFixed(0)}%</div>
+                  <div style="color:var(--text2);">3PT</div>
+                  <div style="color:var(--text2);font-size:10px;">${p.three_made}-${p.three_attempted}</div>
+                </div>
+                <div style="flex:1;text-align:center;">
+                  <div style="font-size:18px;font-weight:700;color:${(p.ft_pct * 100) >= 60 ? 'var(--green)' : (p.ft_pct * 100) >= 40 ? 'var(--text)' : 'var(--red)'};">${(p.ft_pct * 100).toFixed(0)}%</div>
+                  <div style="color:var(--text2);">FT</div>
+                  <div style="color:var(--text2);font-size:10px;">${p.ft_made}-${p.ft_attempted}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    });
+    document.getElementById('roster-list').innerHTML = rosterHtml;
+
+  } catch (err) {
+    console.error('Error loading season:', err);
+  }
+}
+
+// ── Post-Game Follow-Up ─────────────────
+async function savePostgameNotes(gameId, opponent, date) {
+  const gcLink = document.getElementById('postgame-gc-link').value.trim();
+  const tendencies = document.getElementById('postgame-tendencies').value.trim();
+  const adjustments = document.getElementById('postgame-adjustments').value.trim();
+  const statusEl = document.getElementById('postgame-save-status');
+
+  if (!gcLink && !tendencies && !adjustments) {
+    statusEl.textContent = 'Nothing to save.';
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/game/followup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ game_id: gameId, opponent, date, gc_link: gcLink, tendencies, adjustments }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      statusEl.textContent = 'Error: ' + data.error;
+    } else {
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `Saved: ${data.players_added || 0} player tendencies, ${data.observations_added || 0} observations`;
+      document.getElementById('postgame-gc-link').value = '';
+      document.getElementById('postgame-tendencies').value = '';
+      document.getElementById('postgame-adjustments').value = '';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// ── Opponent Player Cards ────────────────
+function toggleAddPlayer() {
+  const form = document.getElementById('add-player-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveNewPlayer() {
+  const opponent = document.getElementById('add-player-opponent').value.trim()
+    || document.getElementById('scout-opponent').value.trim();
+  if (!opponent) { alert('Enter an opponent team name.'); return; }
+
+  const number = document.getElementById('add-player-number').value.trim().replace('#', '');
+  const name = document.getElementById('add-player-name').value.trim();
+  const tendencies = document.getElementById('add-player-tendencies').value.trim();
+  const statusEl = document.getElementById('add-player-status');
+
+  if (!number) { statusEl.textContent = 'Enter a jersey number.'; return; }
+
+  const lines = tendencies.split('\n').filter(l => l.trim());
+
+  try {
+    for (const tendency of lines) {
+      await fetch('/api/game/followup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          game_id: null, opponent, date: new Date().toISOString().split('T')[0],
+          gc_link: '', tendencies: `#${number} ${tendency.trim()}`, adjustments: '',
+        }),
+      });
+    }
+
+    // Also save the name if provided
+    if (name || lines.length === 0) {
+      await fetch('/api/game/followup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          game_id: null, opponent, date: new Date().toISOString().split('T')[0],
+          gc_link: '', tendencies: `#${number} ${name || 'player'}`, adjustments: '',
+        }),
+      });
+    }
+
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `Saved #${number} for ${opponent}`;
+
+    document.getElementById('add-player-number').value = '';
+    document.getElementById('add-player-name').value = '';
+    document.getElementById('add-player-tendencies').value = '';
+
+    loadOpponentPlayers(opponent);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function loadOpponentPlayers(opponent) {
+  const section = document.getElementById('opp-players-section');
+  const container = document.getElementById('opp-players-list');
+
+  if (!opponent) {
+    section.style.display = 'none';
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/opponent-players/${encodeURIComponent(opponent)}`);
+    const players = await resp.json();
+
+    if (!players || players.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+
+    section.style.display = 'block';
+
+    // Store for edit operations
+    window._oppPlayers = players;
+
+    container.innerHTML = players.map((p, pIdx) => {
+      const tendencyList = (p.tendencies || []).map((t, tIdx) =>
+        `<li style="margin-bottom:4px;font-size:13px;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
+          <span>${t}</span>
+          <button style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;opacity:0.5;" onclick="deleteTendency('${p.id}',${tIdx},'${opponent}')" title="Remove">&times;</button>
+        </li>`
+      ).join('');
+
+      return `
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
+          <div style="display:flex;">
+            <div style="width:56px;min-height:100%;background:rgba(255,69,58,0.1);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 0;border-right:1px solid var(--border);">
+              <div style="font-size:24px;font-weight:800;color:var(--red);line-height:1;">#${p.number}</div>
+              <div style="font-size:9px;color:var(--text2);margin-top:4px;">${p.games_seen || 1} game${(p.games_seen || 1) > 1 ? 's' : ''}</div>
+            </div>
+            <div style="flex:1;padding:12px 14px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:15px;font-weight:600;">${p.name || 'Unknown'}</div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <span style="font-size:10px;color:var(--text2);">${p.opponent_team}</span>
+                  <button style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;font-size:10px;padding:2px 8px;border-radius:4px;" onclick="deletePlayer('${p.id}','${opponent}')">Delete</button>
+                </div>
+              </div>
+              <ul style="margin:8px 0 0 16px;padding:0;list-style:none;">
+                ${tendencyList || '<li style="color:var(--text2);font-size:13px;">No tendencies recorded yet</li>'}
+              </ul>
+              <div style="margin-top:8px;display:flex;gap:4px;">
+                <input type="text" id="new-tendency-${p.id}" placeholder="Add tendency..." style="margin:0;padding:6px 10px;font-size:12px;flex:1;">
+                <button class="btn btn-secondary" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="addTendency('${p.id}','${opponent}')">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    section.style.display = 'none';
+  }
+}
+
+async function deleteTendency(playerId, tendencyIdx, opponent) {
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'delete_tendency', index: tendencyIdx }),
+  });
+  loadOpponentPlayers(opponent);
+}
+
+async function addTendency(playerId, opponent) {
+  const input = document.getElementById('new-tendency-' + playerId);
+  const tendency = input.value.trim();
+  if (!tendency) return;
+
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'add_tendency', tendency }),
+  });
+  input.value = '';
+  loadOpponentPlayers(opponent);
+}
+
+async function deletePlayer(playerId, opponent) {
+  if (!confirm('Delete this player?')) return;
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'delete_player' }),
+  });
+  loadOpponentPlayers(opponent);
+}
+
+// ── Guide ───────────────────────────────
+async function loadGuide() {
+  try {
+    const resp = await fetch('/api/guide');
+    const data = await resp.json();
+    document.getElementById('guide-content').innerHTML = markdownToHtml(data.content || 'Guide not found.');
+  } catch (err) {
+    document.getElementById('guide-content').innerHTML = '<p>Error loading guide.</p>';
+  }
+}
+
+// ── Markdown → HTML ─────────────────────
+function markdownToHtml(md) {
+  if (!md) return '';
+
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+  let inOl = false;
+  let inTable = false;
+  let tableHeaderDone = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Table detection: line with pipes
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+
+      // Check if next line is separator (|---|---|)
+      const nextLine = (lines[i + 1] || '').trim();
+      const isSeparator = /^\|[\s\-:]+\|/.test(nextLine) && nextLine.split('|').slice(1, -1).every(c => /^[\s\-:]+$/.test(c.trim()));
+
+      if (!inTable) {
+        // Close any open list
+        if (inList) { html += '</ul>'; inList = false; }
+        if (inOl) { html += '</ol>'; inOl = false; }
+        html += '<table>';
+        inTable = true;
+        tableHeaderDone = false;
+      }
+
+      if (isSeparator && !tableHeaderDone) {
+        // This is the header row
+        html += '<thead><tr>' + cells.map(c => `<th>${applyInline(c)}</th>`).join('') + '</tr></thead><tbody>';
+        i++; // skip separator line
+        tableHeaderDone = true;
+      } else {
+        html += '<tr>' + cells.map(c => `<td>${applyInline(c)}</td>`).join('') + '</tr>';
+      }
+      continue;
+    }
+
+    // Close table if we were in one
+    if (inTable) {
+      if (tableHeaderDone) html += '</tbody>';
+      html += '</table>';
+      inTable = false;
+      tableHeaderDone = false;
+    }
+
+    // Headers
+    if (line.startsWith('### ')) { closeList(); html += `<h3>${applyInline(line.slice(4))}</h3>`; continue; }
+    if (line.startsWith('## ')) { closeList(); html += `<h2>${applyInline(line.slice(3))}</h2>`; continue; }
+    if (line.startsWith('# ')) { closeList(); html += `<h1>${applyInline(line.slice(2))}</h1>`; continue; }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) { closeList(); html += '<hr style="border-color:var(--border);margin:16px 0;">'; continue; }
+
+    // Blockquote
+    if (line.startsWith('> ')) { closeList(); html += `<blockquote style="border-left:3px solid var(--accent);padding:8px 14px;margin:10px 0;color:var(--text2);font-style:italic;">${applyInline(line.slice(2))}</blockquote>`; continue; }
+
+    // Unordered list
+    if (/^[\-\*] /.test(line.trim())) {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${applyInline(line.trim().slice(2))}</li>`;
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\. /.test(line.trim())) {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (!inOl) { html += '<ol>'; inOl = true; }
+      html += `<li>${applyInline(line.trim().replace(/^\d+\. /, ''))}</li>`;
+      continue;
+    }
+
+    // Close lists if we hit a non-list line
+    closeList();
+
+    // Empty line = paragraph break
+    if (line.trim() === '') {
+      html += '<br>';
+      continue;
+    }
+
+    // Regular text
+    html += `<p>${applyInline(line)}</p>`;
+  }
+
+  // Close any remaining open elements
+  closeList();
+  if (inTable) {
+    if (tableHeaderDone) html += '</tbody>';
+    html += '</table>';
+  }
+
+  function closeList() {
+    if (inList) { html += '</ul>'; inList = false; }
+    if (inOl) { html += '</ol>'; inOl = false; }
+  }
+
+  return html;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function applyInline(text) {
+  // Escape HTML first to prevent XSS from AI output or user input
+  return escapeHtml(text)
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background:var(--surface2);padding:2px 5px;border-radius:3px;font-size:13px;">$1</code>');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+data/games.db
+reports/
+*.webarchive
+.env
+.env.*
+.DS_Store
+*.log
+*.pem
+*.key
+*.secret
+*.cert
+railway.toml

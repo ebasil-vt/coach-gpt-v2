@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CoachGPT Cost Monitoring — Weekly Reports & Budget Alerts (separate from VT AI)'
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: ebasil@versatechinc.com
+    Description: Email address for CoachGPT cost reports
+    AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+
+  MonthlyBudget:
+    Type: Number
+    Default: 20
+    Description: Monthly budget in USD for CoachGPT
+
+Resources:
+  # SNS topic — separate from VT AI's vt-ai-cost-alerts
+  CoachGPTAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: coachgpt-cost-alerts
+      DisplayName: CoachGPT Cost Alerts
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+
+  # IAM role for Lambda
+  CoachGPTCostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: coachgpt-cost-report-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CoachGPTCostPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ce:GetCostAndUsage
+                  - ce:GetCostForecast
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref CoachGPTAlertTopic
+
+  # Lambda function
+  WeeklyReportFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: coachgpt-weekly-report
+      Runtime: python3.11
+      Handler: lambda-weekly-report.lambda_handler
+      Role: !GetAtt CoachGPTCostRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref CoachGPTAlertTopic
+          BUDGET_MONTHLY: !Ref MonthlyBudget
+      Code:
+        ZipFile: |
+          # Placeholder — deploy using: aws lambda update-function-code
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Deploy actual code'}
+      Tags:
+        - Key: Project
+          Value: coachgpt
+
+  # EventBridge schedule — Monday 10 AM UTC (1 hour after VT AI report)
+  WeeklyReportRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: coachgpt-weekly-report
+      Description: CoachGPT weekly cost report - every Monday 10 AM UTC
+      ScheduleExpression: cron(0 10 ? * MON *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt WeeklyReportFunction.Arn
+          Id: CoachGPTWeeklyTarget
+
+  WeeklyReportPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WeeklyReportFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt WeeklyReportRule.Arn
+
+  # Budget alarm at 80%
+  BudgetWarningAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: coachgpt-budget-warning
+      AlarmDescription: !Sub 'CoachGPT spend approaching ${MonthlyBudget}/month budget'
+      MetricName: EstimatedCharges
+      Namespace: AWS/Billing
+      Statistic: Maximum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: !Sub '${MonthlyBudget}'
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref CoachGPTAlertTopic
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: Currency
+          Value: USD
+
+Outputs:
+  SNSTopicArn:
+    Description: CoachGPT SNS Topic ARN
+    Value: !Ref CoachGPTAlertTopic
+
+  LambdaFunctionArn:
+    Description: Weekly Report Lambda ARN
+    Value: !GetAtt WeeklyReportFunction.Arn
+
+  ScheduleRule:
+    Description: EventBridge schedule
+    Value: 'Every Monday 10 AM UTC (5 AM EST / 6 AM EDT)'

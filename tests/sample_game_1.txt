@@ -1,0 +1,43 @@
+Game: vs Lincoln High Eagles
+Date: April 5, 2026
+Location: Lincoln High Gymnasium
+Final Score: Our team (Wildcats) 58 - Lincoln High 52
+
+=== OUR TEAM (Wildcats) Box Score ===
+Player          #   MIN  PTS  FGM-FGA  3PM-3PA  FTM-FTA  REB  AST  STL  TO  BLK  PF
+Marcus Johnson  3   32   18   7-14     2-5      2-2      6    3    2    1   0    2
+Jaylen Carter   11  30   14   5-11     1-4      3-4      4    5    1    3   0    3
+DeSean Williams 22  28   10   4-9      0-2      2-4      8    1    0    2   2    4
+Amir Hassan     5   26   8    3-8      2-4      0-0      3    2    3    1   0    2
+Tyler Brooks    15  24   4    2-6      0-1      0-0      2    4    1    2   0    1
+Isaiah Thomas   24  18   4    2-5      0-1      0-2      3    0    0    1   1    3
+Kevin Park      30  14   0    0-3      0-2      0-0      2    1    0    0   0    1
+Darius Mitchell 4   8    0    0-1      0-0      0-0      1    0    1    0   0    0
+TEAM TOTALS         --   58   23-57    5-19     7-12     29   16   8    10  3    16
+
+=== OPPONENT (Lincoln High Eagles) Box Score ===
+Player          #   MIN  PTS  FGM-FGA  3PM-3PA  FTM-FTA  REB  AST  STL  TO  BLK  PF
+DeAndre Smith   1   34   22   8-16     3-6      3-4      5    2    3    2   0    2
+Chris Williams  10  32   12   5-13     1-5      1-2      7    3    1    3   1    3
+Ryan Torres     33  30   8    3-10     0-3      2-2      6    1    0    4   2    4
+James Lee       7   28   6    2-7      2-4      0-0      3    4    2    2   0    1
+Marcus Taylor   20  26   4    2-8      0-2      0-0      2    2    0    3   0    3
+Avery Johnson   12  16   0    0-4      0-3      0-0      1    0    0    1   0    2
+Diego Ramirez   14  14   0    0-2      0-0      0-0      3    1    1    0   0    0
+TEAM TOTALS         --   52   20-60    6-23     6-8      27   13   7    15  3    15
+
+Quarter Scores:
+         Q1   Q2   Q3   Q4
+Wildcats 12   14   18   14
+Lincoln  16   15   10   11
+
+=== Coach Notes ===
+- Lincoln came out FAST in Q1-Q2, running transition every chance they got. DeAndre Smith was getting easy layups off the break.
+- We switched to full court press at the start of Q3 and it completely disrupted their rhythm. They had 8 turnovers in Q3 alone.
+- Their half-court offense looks disorganized. When we forced them to set up, they relied too much on Smith iso plays that went nowhere.
+- Williams (#10) is their second option but he forces bad 3s when the shot clock is running down. He went 1-5 from three.
+- We dominated the glass in the second half after DeSean started boxing out Torres.
+- Carter ran the offense beautifully — 5 assists and kept us organized during the press.
+- ADJUSTMENT: Started Q3 in press, kept it until Lincoln adjusted (~6 min mark), then switched to 2-3 zone.
+- Their weakness is definitely on the left side. When we forced them left, they couldn't score. Most of their points came from the right wing.
+- Free throw shooting needs work — we left 5 points at the line (7-12).

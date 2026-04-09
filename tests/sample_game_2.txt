@@ -1,0 +1,41 @@
+Game: vs Lincoln High Eagles
+Date: March 15, 2026
+Location: Wildcats Home Gym
+Final Score: Wildcats 51 - Lincoln High 55 (L)
+
+=== OUR TEAM (Wildcats) Box Score ===
+Player          #   MIN  PTS  FGM-FGA  3PM-3PA  FTM-FTA  REB  AST  STL  TO  BLK  PF
+Marcus Johnson  3   34   16   6-15     2-6      2-3      5    2    1    3   0    3
+Jaylen Carter   11  32   12   5-12     0-3      2-2      3    4    0    4   0    2
+DeSean Williams 22  30   10   4-10     0-1      2-4      7    0    1    2   1    4
+Amir Hassan     5   28   6    2-7      1-3      1-2      2    3    2    1   0    2
+Tyler Brooks    15  22   5    2-5      1-2      0-0      3    2    0    2   0    1
+Isaiah Thomas   24  20   2    1-4      0-1      0-0      4    0    0    1   1    3
+Kevin Park      30  14   0    0-2      0-1      0-0      1    1    0    0   0    0
+TEAM TOTALS         --   51   20-55    4-17     7-11     25   12   4    13  2    15
+
+=== OPPONENT (Lincoln High Eagles) Box Score ===
+Player          #   MIN  PTS  FGM-FGA  3PM-3PA  FTM-FTA  REB  AST  STL  TO  BLK  PF
+DeAndre Smith   1   36   26   10-18    4-7      2-3      6    3    4    1   0    1
+Chris Williams  10  34   14   5-12     2-6      2-2      5    2    1    2   0    3
+Ryan Torres     33  32   8    3-9      1-3      1-2      8    0    0    3   3    3
+James Lee       7   26   5    2-6      1-3      0-0      2    5    2    1   0    2
+Marcus Taylor   20  24   2    1-5      0-2      0-0      3    1    0    2   0    2
+Avery Johnson   12  14   0    0-3      0-2      0-0      2    0    0    1   0    2
+TEAM TOTALS         --   55   21-53    8-23     5-7      26   11   7    10  3    13
+
+Quarter Scores:
+         Q1   Q2   Q3   Q4
+Wildcats 10   14   15   12
+Lincoln  18   12   13   12
+
+=== Coach Notes ===
+- We got KILLED in Q1. Lincoln ran transition on almost every possession and we couldn't get back.
+- DeAndre Smith had 12 points in Q1 alone, mostly on fast breaks. We had no answer.
+- Settled down in Q2 after going to half-court man defense but the damage was done.
+- Our turnovers were the story — 13 total, and most led to Lincoln fast break points.
+- Carter had 4 turnovers which is unlike him. Their press rattled us early.
+- We never tried full court press ourselves which in hindsight was a mistake.
+- Their three point shooting was the difference — 8-23 (35%) vs our 4-17 (24%).
+- Torres controlled the boards but he's beatable if we box out early.
+- LESSON: We MUST find a way to stop their transition game. That's their entire identity.
