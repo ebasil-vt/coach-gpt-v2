@@ -302,17 +302,25 @@ def _web_search(client, opponent: str,
 
     # Targeted searches across key basketball data sources
     search_queries = [
-        # GameChanger — game recaps, team pages, box scores
+        # GameChanger — opponent team page and game recaps
         f"site:web.gc.com {opponent} basketball",
+        # GameChanger — our team's games vs this opponent
+        f"site:web.gc.com \"{_TEAM_NAME}\" \"{opponent}\"",
         # HCRPS — league standings, schedules, scores
         f"site:hcrpsports.org {opponent}",
+        # HCRPS — our team in standings (for cross-reference)
+        f"site:hcrpsports.org \"{_TEAM_NAME}\"",
         # Exposure Events — tournament results, rankings
         f"site:exposureevents.com {opponent} basketball",
-        # General search for broader coverage
-        f"{opponent} youth basketball Maryland results scores 2025 2026",
+        # Exposure Events — our team (to find common tournaments)
+        f"site:exposureevents.com \"{_TEAM_NAME}\"",
+        # General search for opponent
+        f"{opponent} youth basketball {_TEAM_LOCATION} results scores 2025 2026",
     ]
     if league_info:
         search_queries.append(f"{opponent} {league_info}")
+    # Also search for matchup history
+    search_queries.append(f"\"{_TEAM_NAME}\" vs \"{opponent}\"")
 
     # Run actual web searches
     all_results = []
@@ -325,12 +333,19 @@ def _web_search(client, opponent: str,
     if not all_results:
         return "No web search results found. Brave Search API key may not be configured."
 
-    # Fetch the most promising pages for detailed data
-    priority_domains = ["web.gc.com", "hcrpsports.org", "exposureevents.com", "maxpreps.com"]
+    # Always fetch our team's current GC schedule for cross-reference
     fetched_pages = []
+    our_gc_url = f"https://web.gc.com/teams/{_GC_TEAM_CURRENT}"
+    print(f"  [researcher] Fetching our team schedule: {our_gc_url}")
+    our_gc_text = _fetch_page(our_gc_url)
+    if our_gc_text:
+        fetched_pages.append(f"PAGE: Our Team GameChanger ({our_gc_url})\n{our_gc_text}")
+
+    # Fetch the most promising pages for opponent data
+    priority_domains = ["web.gc.com", "hcrpsports.org", "exposureevents.com", "maxpreps.com"]
     fetch_count = 0
     for r in all_results:
-        if fetch_count >= 3:
+        if fetch_count >= 4:
             break
         url = r.get("url", "")
         if any(domain in url for domain in priority_domains):
