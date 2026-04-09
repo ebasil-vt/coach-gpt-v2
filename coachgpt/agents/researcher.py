@@ -278,13 +278,38 @@ def _brave_search(query: str, count: int = 5) -> list[dict]:
         return []
 
 
+def _fetch_page(url: str, timeout: int = 15) -> str:
+    """Fetch a web page and return its text content (stripped of HTML tags)."""
+    try:
+        resp = httpx.get(url, timeout=timeout, follow_redirects=True,
+                         headers={"User-Agent": "CoachGPT/1.0 (basketball research)"})
+        resp.raise_for_status()
+        import re
+        text = re.sub(r'<script[^>]*>.*?</script>', '', resp.text, flags=re.DOTALL)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Limit to first 8000 chars to avoid token bloat
+        return text[:8000]
+    except Exception as e:
+        print(f"  [researcher] Fetch error for {url}: {e}")
+        return ""
+
+
 def _web_search(client, opponent: str,
                 league_info: str = "") -> str:
-    """Search the web for opponent information using Brave Search API."""
+    """Search the web for opponent information using Brave Search API + page fetching."""
 
+    # Targeted searches across key basketball data sources
     search_queries = [
-        f"{opponent} basketball schedule results 2025 2026",
-        f"{opponent} youth basketball Maryland standings",
+        # GameChanger — game recaps, team pages, box scores
+        f"site:web.gc.com {opponent} basketball",
+        # HCRPS — league standings, schedules, scores
+        f"site:hcrpsports.org {opponent}",
+        # Exposure Events — tournament results, rankings
+        f"site:exposureevents.com {opponent} basketball",
+        # General search for broader coverage
+        f"{opponent} youth basketball Maryland results scores 2025 2026",
     ]
     if league_info:
         search_queries.append(f"{opponent} {league_info}")
@@ -292,7 +317,7 @@ def _web_search(client, opponent: str,
     # Run actual web searches
     all_results = []
     for query in search_queries:
-        results = _brave_search(query)
+        results = _brave_search(query, count=5)
         for r in results:
             if r not in all_results:
                 all_results.append(r)
@@ -300,14 +325,34 @@ def _web_search(client, opponent: str,
     if not all_results:
         return "No web search results found. Brave Search API key may not be configured."
 
-    # Format results for Claude to analyze
+    # Fetch the most promising pages for detailed data
+    priority_domains = ["web.gc.com", "hcrpsports.org", "exposureevents.com", "maxpreps.com"]
+    fetched_pages = []
+    fetch_count = 0
+    for r in all_results:
+        if fetch_count >= 3:
+            break
+        url = r.get("url", "")
+        if any(domain in url for domain in priority_domains):
+            print(f"  [researcher] Fetching: {url}")
+            page_text = _fetch_page(url)
+            if page_text:
+                fetched_pages.append(f"PAGE: {r['title']} ({url})\n{page_text}")
+                fetch_count += 1
+
+    # Format search results
     formatted = []
     for i, r in enumerate(all_results[:15], 1):
         formatted.append(f"{i}. **{r['title']}**\n   URL: {r['url']}\n   {r['description']}")
 
     search_text = "\n\n".join(formatted)
 
-    # Have Claude synthesize the search results
+    # Add fetched page content
+    page_content = ""
+    if fetched_pages:
+        page_content = "\n\nFETCHED PAGE CONTENT:\n" + "\n\n---\n\n".join(fetched_pages)
+
+    # Have Claude synthesize everything
     response = client.messages.create(
         model=HAIKU,
         max_tokens=2048,
@@ -315,9 +360,11 @@ def _web_search(client, opponent: str,
             "role": "user",
             "content": (
                 f"I searched the web for basketball team '{opponent}'. Here are the search results:\n\n"
-                f"{search_text}\n\n"
-                f"Summarize any relevant information about this team's record, results, players, "
-                f"or schedule. Only include facts from the search results — do NOT invent anything. "
+                f"{search_text}"
+                f"{page_content}\n\n"
+                f"Extract ALL factual information about this team: game results (scores, opponents, dates), "
+                f"standings, win-loss record, player names/numbers, tournament placements, and schedule. "
+                f"Only include facts from the search results and page content — do NOT invent anything. "
                 f"If no results are relevant, say 'No relevant data found in search results.'"
             ),
         }],
