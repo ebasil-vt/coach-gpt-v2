@@ -7,8 +7,12 @@ then cross-references with our own database for comparative analysis.
 import json
 import os
 
+import httpx
+
 from coachgpt.ai_client import get_client, HAIKU, SONNET
 from coachgpt import database as db
+
+BRAVE_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "")
 
 # Team config — override via env vars so no personal data is hardcoded in source
 _TEAM_NAME = os.environ.get("COACHGPT_TEAM_NAME", "Maryland Sting 2031 - Peay")
@@ -249,9 +253,34 @@ def _check_league_standings(opponent: str) -> str | None:
     return None
 
 
+def _brave_search(query: str, count: int = 5) -> list[dict]:
+    """Search using Brave Search API. Returns list of {title, url, description}."""
+    if not BRAVE_API_KEY:
+        return []
+    try:
+        resp = httpx.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={"q": query, "count": count},
+            headers={"X-Subscription-Token": BRAVE_API_KEY, "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = []
+        for item in resp.json().get("web", {}).get("results", []):
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "description": item.get("description", ""),
+            })
+        return results
+    except Exception as e:
+        print(f"  [researcher] Brave search error: {e}")
+        return []
+
+
 def _web_search(client, opponent: str,
                 league_info: str = "") -> str:
-    """Use Claude to search the web for opponent information."""
+    """Search the web for opponent information using Brave Search API."""
 
     search_queries = [
         f"{opponent} basketball schedule results 2025 2026",
@@ -260,21 +289,36 @@ def _web_search(client, opponent: str,
     if league_info:
         search_queries.append(f"{opponent} {league_info}")
 
-    # Use Claude with a simple prompt to synthesize what it knows
-    # In production, this would use WebSearch/WebFetch tools via Agent SDK
+    # Run actual web searches
+    all_results = []
+    for query in search_queries:
+        results = _brave_search(query)
+        for r in results:
+            if r not in all_results:
+                all_results.append(r)
+
+    if not all_results:
+        return "No web search results found. Brave Search API key may not be configured."
+
+    # Format results for Claude to analyze
+    formatted = []
+    for i, r in enumerate(all_results[:15], 1):
+        formatted.append(f"{i}. **{r['title']}**\n   URL: {r['url']}\n   {r['description']}")
+
+    search_text = "\n\n".join(formatted)
+
+    # Have Claude synthesize the search results
     response = client.messages.create(
         model=HAIKU,
         max_tokens=2048,
         messages=[{
             "role": "user",
             "content": (
-                f"I'm looking for public basketball game results and schedule for a team called '{opponent}'."
-                f"\n{'League context: ' + league_info if league_info else ''}"
-                f"\n\nSearch queries to try:\n"
-                + "\n".join(f"- {q}" for q in search_queries)
-                + "\n\nIf you have any knowledge about this team, their league, or similar teams in the area, share it."
-                "\nIf you don't have specific information, say 'No public data found for this team.'"
-                "\nDo NOT invent results or records."
+                f"I searched the web for basketball team '{opponent}'. Here are the search results:\n\n"
+                f"{search_text}\n\n"
+                f"Summarize any relevant information about this team's record, results, players, "
+                f"or schedule. Only include facts from the search results — do NOT invent anything. "
+                f"If no results are relevant, say 'No relevant data found in search results.'"
             ),
         }],
     )
