@@ -26,7 +26,7 @@ HAIKU = os.environ.get(
 )
 SONNET = os.environ.get(
     "COACHGPT_MODEL_SONNET",
-    "us.anthropic.claude-sonnet-4-6-v1:0"
+    "us.anthropic.claude-sonnet-4-6"
     if os.environ.get("AWS_REGION")
     else "claude-sonnet-4-6",
 )
