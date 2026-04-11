@@ -6,6 +6,7 @@ then cross-references with our own database for comparative analysis.
 
 import json
 import os
+import re
 
 import httpx
 
@@ -296,6 +297,177 @@ def _fetch_page(url: str, timeout: int = 15) -> str:
         return ""
 
 
+def _get_known_event_ids() -> list[str]:
+    """Return Exposure Events IDs to auto-scrape.
+
+    Reads COACHGPT_TOURNAMENT_IDS env var (comma-separated) and appends
+    any hardcoded defaults so the Maryland MAYHEM Classic is always checked.
+    """
+    hardcoded = ["258638"]  # Maryland MAYHEM Classic
+    env_val = os.environ.get("COACHGPT_TOURNAMENT_IDS", "")
+    env_ids = [e.strip() for e in env_val.split(",") if e.strip()]
+    seen: set[str] = set()
+    result: list[str] = []
+    for eid in env_ids + hardcoded:
+        if eid not in seen:
+            seen.add(eid)
+            result.append(eid)
+    return result
+
+
+def _scrape_tournament_teams(event_id: str) -> list[dict]:
+    """Fetch an Exposure Events /teams page and store all teams in the DB.
+
+    Returns a list of {team_name, division, source_url} dicts for every team
+    found. Teams are upserted into the scouted_teams table so subsequent
+    fuzzy searches can find them.
+    """
+    url = f"https://basketball.exposureevents.com/{event_id}/teams"
+    print(f"  [researcher] Scraping tournament teams: {url}")
+    html = ""
+    try:
+        resp = httpx.get(url, timeout=15, follow_redirects=True,
+                         headers={"User-Agent": "CoachGPT/1.0 (basketball research)"})
+        resp.raise_for_status()
+        html = resp.text
+    except Exception as e:
+        print(f"  [researcher] Tournament scrape error for event {event_id}: {e}")
+        return []
+
+    # Extract event name from <title> or <h1>
+    event_name_match = re.search(r'<title[^>]*>([^<]+)</title>', html, re.IGNORECASE)
+    event_name = event_name_match.group(1).strip() if event_name_match else f"Event {event_id}"
+    # Clean up common title suffixes like " | Exposure Events"
+    event_name = re.sub(r'\s*\|.*$', '', event_name).strip()
+
+    teams_found: list[dict] = []
+
+    # Strategy 1: look for team name elements in common EE markup patterns
+    # EE renders team lists server-side; team names appear in anchor text or
+    # data attributes within list items / table rows.
+    # Pattern: team name text between tags, optionally preceded by a division header.
+    current_division = ""
+
+    # Division headers — e.g. <h2>13U</h2> or class="division-name"
+    division_pattern = re.compile(
+        r'class=["\'][^"\']*division[^"\']*["\'][^>]*>\s*([^<]+?)\s*<', re.IGNORECASE
+    )
+    # Team entries — look for anchor tags or list items with team names
+    # EE uses patterns like: <a href="/258638/teams/12345">Team Name</a>
+    team_link_pattern = re.compile(
+        r'href=["\'][^"\']*/' + re.escape(event_id) + r'/teams?/\d+[^"\']*["\'][^>]*>\s*([^<]{3,60}?)\s*<',
+        re.IGNORECASE
+    )
+    # Fallback: any anchor with /teams/ in href
+    generic_team_pattern = re.compile(
+        r'href=["\'][^"\']+/teams?/\d+[^"\']*["\'][^>]*>\s*([^<]{3,60}?)\s*<',
+        re.IGNORECASE
+    )
+
+    # Walk through the HTML tracking divisions
+    pos = 0
+    while pos < len(html):
+        # Check for a division header near current position
+        div_m = division_pattern.search(html, pos, pos + 2000)
+        team_m = team_link_pattern.search(html, pos)
+
+        if team_m:
+            # If there's a division header before this team entry, capture it
+            if div_m and div_m.start() < team_m.start():
+                current_division = div_m.group(1).strip()
+                pos = div_m.end()
+                continue
+
+            team_name = team_m.group(1).strip()
+            # Skip navigation / boilerplate words
+            if len(team_name) >= 3 and team_name.lower() not in {
+                "teams", "schedule", "brackets", "standings", "home", "back"
+            }:
+                teams_found.append({
+                    "team_name": team_name,
+                    "division": current_division or None,
+                    "source_url": url,
+                })
+                db.upsert_scouted_team(
+                    team_name=team_name,
+                    source="exposure_events",
+                    source_url=url,
+                    event_name=event_name,
+                    event_id=event_id,
+                    division=current_division or None,
+                )
+            pos = team_m.end()
+        else:
+            break
+
+    # If primary pattern found nothing, try generic fallback
+    if not teams_found:
+        for m in generic_team_pattern.finditer(html):
+            team_name = m.group(1).strip()
+            if len(team_name) >= 3 and team_name.lower() not in {
+                "teams", "schedule", "brackets", "standings", "home", "back"
+            }:
+                teams_found.append({
+                    "team_name": team_name,
+                    "division": None,
+                    "source_url": url,
+                })
+                db.upsert_scouted_team(
+                    team_name=team_name,
+                    source="exposure_events",
+                    source_url=url,
+                    event_name=event_name,
+                    event_id=event_id,
+                )
+
+    print(f"  [researcher] Tournament {event_id}: {len(teams_found)} teams stored")
+    return teams_found
+
+
+def _discover_tournaments() -> list[dict]:
+    """Fetch Maryland tournament listings from Exposure Events.
+
+    Returns a list of {event_id, event_name, dates} dicts extracted from the
+    Maryland youth basketball tournament page.
+    """
+    url = "https://basketball.exposureevents.com/youth-basketball-tournaments/maryland"
+    print(f"  [researcher] Discovering tournaments: {url}")
+    html = ""
+    try:
+        resp = httpx.get(url, timeout=15, follow_redirects=True,
+                         headers={"User-Agent": "CoachGPT/1.0 (basketball research)"})
+        resp.raise_for_status()
+        html = resp.text
+    except Exception as e:
+        print(f"  [researcher] Tournament discovery error: {e}")
+        return []
+
+    # Extract event IDs from tournament links — pattern: href="/258638/..." or href="/258638"
+    tournament_link_pattern = re.compile(
+        r'href=["\'](?:https?://[^"\']*)?/(\d+)(?:/[^"\']*)?["\'][^>]*>\s*([^<]{5,120}?)\s*<',
+        re.IGNORECASE
+    )
+    seen_ids: set[str] = set()
+    tournaments: list[dict] = []
+    for m in tournament_link_pattern.finditer(html):
+        event_id = m.group(1)
+        event_name = m.group(2).strip()
+        if event_id in seen_ids:
+            continue
+        # Skip IDs that look like years or small numbers (not event IDs)
+        if len(event_id) < 4:
+            continue
+        seen_ids.add(event_id)
+        tournaments.append({
+            "event_id": event_id,
+            "event_name": event_name,
+            "dates": None,
+        })
+
+    print(f"  [researcher] Discovered {len(tournaments)} tournaments")
+    return tournaments
+
+
 def _web_search(client, opponent: str,
                 league_info: str = "") -> str:
     """Multi-tier web search with fallback chain and quality tracking.
@@ -307,6 +479,32 @@ def _web_search(client, opponent: str,
     """
 
     source_log = []  # Track what each source returned
+
+    # ── TIER 0: Local team database + tournament scrape ──────────────
+    db_matches = db.search_scouted_teams(opponent)
+    if db_matches:
+        source_log.append(f"✓ Team DB: {len(db_matches)} match(es) for '{opponent}'")
+    else:
+        source_log.append(f"✗ Team DB: no matches for '{opponent}' — scraping tournaments")
+        known_events = _get_known_event_ids()
+        for event_id in known_events:
+            teams = _scrape_tournament_teams(event_id)
+            if teams:
+                source_log.append(
+                    f"✓ Tournament scrape {event_id}: {len(teams)} teams stored"
+                )
+            else:
+                source_log.append(f"✗ Tournament scrape {event_id}: no teams found")
+        # Re-check after scraping
+        db_matches = db.search_scouted_teams(opponent)
+        if db_matches:
+            source_log.append(
+                f"✓ Team DB (post-scrape): {len(db_matches)} match(es) for '{opponent}'"
+            )
+
+    db_context = ""
+    if db_matches:
+        db_context = "TEAM DATABASE MATCHES:\n" + json.dumps(db_matches, indent=2)
 
     # ── TIER 1: Direct fetch of known URLs ──────────────────────────
     fetched_pages = []
@@ -360,6 +558,33 @@ def _web_search(client, opponent: str,
                         all_results.append(r)
             else:
                 source_log.append(f"✗ Brave [{label}]: no results")
+
+        # ── TIER 1.5: Exposure Events direct fetch ───────────────────
+        # Search Brave for the opponent on Exposure Events, extract event ID,
+        # fetch the full /teams page, and store everything in the DB.
+        ee_results = _brave_search(f"site:basketball.exposureevents.com {opponent}", count=5)
+        if ee_results:
+            source_log.append(f"✓ Brave [EE direct]: {len(ee_results)} results")
+        for ee_r in ee_results:
+            ee_url = ee_r.get("url", "")
+            ee_match = re.search(r'/(\d{4,})', ee_url)
+            if ee_match:
+                ee_event_id = ee_match.group(1)
+                # Only scrape if we haven't already hit this event in Tier 0
+                already_scraped = any(
+                    t.get("event_id") == ee_event_id for t in db_matches
+                ) if db_matches else False
+                if not already_scraped:
+                    teams = _scrape_tournament_teams(ee_event_id)
+                    if teams:
+                        source_log.append(
+                            f"✓ EE scrape {ee_event_id}: {len(teams)} teams stored"
+                        )
+                        # Refresh db_matches after new scrape
+                        fresh = db.search_scouted_teams(opponent)
+                        if fresh:
+                            db_matches = fresh
+                            db_context = "TEAM DATABASE MATCHES:\n" + json.dumps(db_matches, indent=2)
 
         # ── TIER 3: Brave Search (general) ──────────────────────────
         general_queries = [
@@ -416,7 +641,7 @@ def _web_search(client, opponent: str,
     if fetched_pages:
         page_content = "\n\nFETCHED PAGE CONTENT:\n" + "\n\n---\n\n".join(fetched_pages)
 
-    if not search_text and not page_content:
+    if not search_text and not page_content and not db_context:
         return source_report + "\n\nNo data retrieved from any source."
 
     # Have Claude synthesize everything
@@ -428,7 +653,8 @@ def _web_search(client, opponent: str,
             "content": (
                 f"I'm researching basketball team '{opponent}' for an upcoming game.\n\n"
                 f"{source_report}\n\n"
-                f"{search_text}"
+                + (f"{db_context}\n\n" if db_context else "")
+                + f"{search_text}"
                 f"{page_content}\n\n"
                 f"Extract ALL factual information about '{opponent}': game results (scores, opponents, "
                 f"dates), standings, win-loss record, player names/numbers, tournament placements. "

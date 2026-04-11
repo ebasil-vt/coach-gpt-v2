@@ -212,6 +212,24 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS scouted_teams (
+            id TEXT PRIMARY KEY,
+            team_name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL,
+            source TEXT NOT NULL,
+            source_url TEXT,
+            event_name TEXT,
+            event_id TEXT,
+            division TEXT,
+            location TEXT,
+            gc_team_id TEXT,
+            last_seen TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_scouted_teams_name ON scouted_teams(normalized_name);
+        CREATE INDEX IF NOT EXISTS idx_scouted_teams_event ON scouted_teams(event_id);
+
         CREATE INDEX IF NOT EXISTS idx_player_stats_game ON player_stats(game_id);
         CREATE INDEX IF NOT EXISTS idx_team_stats_game ON team_stats(game_id);
         CREATE INDEX IF NOT EXISTS idx_observations_game ON observations(game_id);
@@ -675,6 +693,162 @@ def get_full_season_data(season_id: str) -> dict | None:
         "roster": get_season_roster(season_id),
         "team_totals": get_team_season_totals(season_id),
     }
+
+
+# ── Scouted Teams ────────────────────────────────────────────────
+
+import re as _re
+
+
+def _normalize_team_name(name: str) -> str:
+    """Normalize a team name for fuzzy matching.
+
+    Strips:
+    - Trailing 4-digit year (2030, 2031, etc.)
+    - Coach/suffix after " - " or " – " if the part after looks like a name
+      (capitalized word, not a number or known suffix like "13U", "14U")
+    - Extra whitespace
+
+    Examples:
+        "Team PA Jones 2031"       -> "team pa"
+        "Team PA - Jones"          -> "team pa"
+        "Maryland Sting - Peay"    -> "maryland sting"
+        "Elkridge Elite - Johnson" -> "elkridge elite"
+        "PA Flight Harrison"       -> "pa flight"
+        "Team PA 2030 Williams"    -> "team pa"
+    """
+    if not name:
+        return ""
+
+    s = name.strip()
+
+    # Strip dash-separated suffix (coach name / location) when the suffix looks
+    # like a proper name: at least one word that starts with an uppercase letter
+    # and is not a division code like "13U".
+    dash_match = _re.split(r'\s*[-–]\s*', s, maxsplit=1)
+    if len(dash_match) == 2:
+        suffix = dash_match[1].strip()
+        # Keep the split only if the suffix looks like a name word (not a division)
+        if _re.match(r'^[A-Z][a-z]+', suffix) and not _re.match(r'^\d+U$', suffix):
+            s = dash_match[0].strip()
+
+    # Strip trailing 4-digit graduation year (2025–2035)
+    s = _re.sub(r'\b20[23]\d\b', '', s).strip()
+
+    # Strip trailing word(s) that look like a coach last name:
+    # a single capitalized word at the end not matching known suffixes
+    def _looks_like_coach(word: str) -> bool:
+        if _re.match(r'^\d+U$', word, _re.IGNORECASE):
+            return False
+        if word.upper() in {"ELITE", "FLIGHT", "STING", "HAWKS", "HEAT",
+                             "KINGS", "STORM", "FORCE", "EXPRESS", "UNITED",
+                             "SELECT", "PREMIER", "ACADEMY", "NATION"}:
+            return False
+        return bool(_re.match(r'^[A-Z][a-z]+$', word))
+
+    words = s.split()
+    while len(words) > 1 and _looks_like_coach(words[-1]):
+        words = words[:-1]
+    s = " ".join(words)
+
+    return s.lower().strip()
+
+
+def upsert_scouted_team(team_name: str, source: str, source_url: str = None,
+                        event_name: str = None, event_id: str = None,
+                        division: str = None, location: str = None,
+                        gc_team_id: str = None) -> str:
+    """Insert or update a scouted team. Keyed on normalized_name + event_id."""
+    normalized = _normalize_team_name(team_name)
+    now = datetime.utcnow().isoformat()
+    conn = get_connection()
+
+    # Try to find existing row with same normalized name and event
+    row = conn.execute(
+        """SELECT id FROM scouted_teams
+           WHERE normalized_name = ? AND (event_id = ? OR (event_id IS NULL AND ? IS NULL))""",
+        (normalized, event_id, event_id)
+    ).fetchone()
+
+    if row:
+        team_id = row["id"]
+        conn.execute(
+            """UPDATE scouted_teams
+               SET team_name = ?, source = ?, source_url = COALESCE(?, source_url),
+                   event_name = COALESCE(?, event_name), division = COALESCE(?, division),
+                   location = COALESCE(?, location), gc_team_id = COALESCE(?, gc_team_id),
+                   last_seen = ?
+               WHERE id = ?""",
+            (team_name, source, source_url, event_name, division,
+             location, gc_team_id, now, team_id)
+        )
+    else:
+        team_id = str(uuid.uuid4())[:8]
+        conn.execute(
+            """INSERT INTO scouted_teams
+               (id, team_name, normalized_name, source, source_url,
+                event_name, event_id, division, location, gc_team_id, last_seen)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (team_id, team_name, normalized, source, source_url,
+             event_name, event_id, division, location, gc_team_id, now)
+        )
+
+    conn.commit()
+    conn.close()
+    return team_id
+
+
+def search_scouted_teams(query: str) -> list[dict]:
+    """Fuzzy-search scouted teams by name.
+
+    Normalizes the query the same way team names are stored, then searches
+    with LIKE. Also tries splitting on " - " to search each part separately.
+    Results are ordered: exact normalized match first, then partial matches.
+    """
+    normalized_query = _normalize_team_name(query)
+    if not normalized_query:
+        return []
+
+    conn = get_connection()
+    seen_ids: set[str] = set()
+    results: list[dict] = []
+
+    def _fetch(pattern: str):
+        rows = conn.execute(
+            "SELECT * FROM scouted_teams WHERE normalized_name LIKE ? ORDER BY last_seen DESC",
+            (pattern,)
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            if d["id"] not in seen_ids:
+                seen_ids.add(d["id"])
+                results.append(d)
+
+    # Exact normalized match
+    _fetch(normalized_query)
+    # Partial match on full normalized query
+    _fetch(f"%{normalized_query}%")
+
+    # Also try each fragment around " - " in the original query
+    parts = _re.split(r'\s*[-–]\s*', query)
+    for part in parts:
+        part_norm = _normalize_team_name(part.strip())
+        if part_norm and part_norm != normalized_query:
+            _fetch(f"%{part_norm}%")
+
+    conn.close()
+    return results
+
+
+def get_scouted_teams_by_event(event_id: str) -> list[dict]:
+    """Return all scouted teams for a given tournament event ID."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM scouted_teams WHERE event_id = ? ORDER BY team_name",
+        (event_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # Initialize on import

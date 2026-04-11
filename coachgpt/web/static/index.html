@@ -380,11 +380,197 @@
   .empty p { font-size: 15px; }
 
   /* ── Responsive ────────────────────── */
+
+  /* Tablet (iPad) */
+  @media (max-width: 900px) {
+    nav { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+    nav h1 { font-size: 18px; }
+    .nav-tabs {
+      order: 3;
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 4px;
+    }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    .nav-tab { white-space: nowrap; flex-shrink: 0; }
+    #user-status { order: 2; }
+  }
+
+  /* Mobile */
   @media (max-width: 600px) {
-    .nav-tabs { gap: 2px; }
-    .nav-tab { padding: 6px 10px; font-size: 12px; }
+    nav { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
     nav h1 { font-size: 17px; }
-    .page { padding: 14px; }
+    .nav-tabs {
+      order: 3;
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: 2px;
+      padding-bottom: 2px;
+    }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    .nav-tab { padding: 8px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; min-height: 36px; }
+    #user-status { order: 2; font-size: 12px; }
+
+    .page { padding: 10px; }
+    .card { padding: 14px; border-radius: 10px; }
+
+    /* Stack all 2-column grids to single column */
+    .responsive-grid,
+    .card > div[style*="grid-template-columns: 1fr 1fr"],
+    .card > div[style*="grid-template-columns:1fr 1fr"] {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* Tables: horizontal scroll */
+    .report-display table { display: block; overflow-x: auto; white-space: nowrap; }
+    .report-display th, .report-display td { padding: 6px 8px; font-size: 12px; }
+
+    /* Opponent cards: stack buttons below name */
+    .opponent-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .opponent-card > div:last-child {
+      width: 100%;
+      display: flex;
+      gap: 6px;
+    }
+    .opponent-card > div:last-child .btn { flex: 1; min-height: 40px; }
+
+    /* Game rows */
+    .game-row { padding: 12px; }
+    .game-opponent { font-size: 14px; }
+    .game-score { font-size: 14px; padding: 4px 8px; }
+
+    /* Report rows */
+    .report-row { padding: 12px; }
+
+    /* Upload zones */
+    .upload-zone { padding: 20px 16px; }
+    .upload-zone .icon { font-size: 28px; }
+
+    /* Buttons: ensure touch-friendly size */
+    .btn { min-height: 44px; padding: 12px 20px; }
+    .btn-scout { min-height: 40px; padding: 10px 14px; }
+
+    /* Report display */
+    .report-display { padding: 16px; border-radius: 10px; }
+    .report-display h1 { font-size: 18px; }
+    .report-display h2 { font-size: 15px; }
+
+    /* Agent progress */
+    .agent-step { padding: 10px 12px; gap: 10px; }
+    .agent-icon { width: 32px; height: 32px; font-size: 14px; }
+    .agent-detail { font-size: 12px; }
+
+    /* Score inputs stay big but fit */
+    input[type="number"] { font-size: 24px !important; padding: 10px !important; }
+
+    /* Textareas */
+    textarea { min-height: 100px; }
+
+    /* Header rows with flex */
+    .page > div[style*="display:flex"][style*="justify-content:space-between"] {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
+
+  /* Fix inline style grids — add responsive class via JS */
+  @media (max-width: 600px) {
+    .m-stack { grid-template-columns: 1fr !important; }
+    .m-stack-flex { flex-direction: column !important; align-items: stretch !important; }
+    .m-stack-flex > * { width: 100% !important; }
+    .m-full { width: 100% !important; }
+
+    /* Team summary stat grid on mobile — 3 cols instead of auto-fit */
+    #team-summary div[style*="grid-template-columns:repeat(auto-fit"] {
+      grid-template-columns: repeat(3, 1fr) !important;
+      gap: 8px !important;
+    }
+
+    /* Roster player cards */
+    #roster-list .card > div[style*="display:flex"] {
+      flex-direction: column;
+    }
+    #roster-list .card div[style*="width:64px"] {
+      width: 100% !important;
+      min-height: auto !important;
+      flex-direction: row !important;
+      padding: 10px 14px !important;
+      gap: 8px;
+      border-right: none !important;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Opponent player cards */
+    #opp-players-list .card > div[style*="display:flex"] {
+      flex-direction: column;
+    }
+    #opp-players-list .card div[style*="width:56px"] {
+      width: 100% !important;
+      min-height: auto !important;
+      flex-direction: row !important;
+      padding: 8px 14px !important;
+      gap: 8px;
+      border-right: none !important;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Shooting stats row — keep 3-col on mobile but tighter */
+    #roster-list div[style*="display:flex"][style*="gap:12px"][style*="border-top"] {
+      gap: 6px !important;
+    }
+    #roster-list div[style*="display:flex"][style*="gap:12px"][style*="border-top"] > div {
+      font-size: 11px !important;
+    }
+    #roster-list div[style*="font-size:18px"] { font-size: 16px !important; }
+
+    /* Stat bar grid — single column on very small screens */
+    #roster-list div[style*="grid-template-columns:1fr 1fr"][style*="gap:4px 16px"] {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* Your Team bar — stack on mobile */
+    #page-new-game > .card:first-child {
+      flex-direction: column !important;
+      align-items: stretch !important;
+    }
+    #page-new-game > .card:first-child label { margin-bottom: 4px !important; }
+
+    /* League table horizontal scroll */
+    #league-report table { display: block; overflow-x: auto; white-space: nowrap; }
+
+    /* Scout page: stack action buttons */
+    #page-scout .card > div[style*="display:flex"][style*="gap:8px"]:last-child {
+      flex-direction: column;
+    }
+    #page-scout .card > div[style*="display:flex"][style*="gap:8px"]:last-child .btn { width: 100%; }
+
+    /* Reports page header */
+    #page-reports > div:first-child {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #page-reports > div:first-child > div {
+      width: 100%;
+    }
+    #page-reports > div:first-child select { flex: 1; }
+  }
+
+  /* Small phones */
+  @media (max-width: 380px) {
+    .nav-tab { padding: 7px 10px; font-size: 12px; }
+    .page { padding: 8px; }
+    .card { padding: 12px; }
+    #team-summary div[style*="grid-template-columns:repeat(auto-fit"] {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
   }
 
   /* ── Print Styles ──────────────────── */
@@ -446,7 +632,7 @@
 <div id="page-new-game" class="page active">
 
   <!-- Your Team (persistent) -->
-  <div class="card" style="margin-bottom:12px; padding:12px 20px; display:flex; align-items:center; gap:12px;">
+  <div class="card m-stack-flex" style="margin-bottom:12px; padding:12px 20px; display:flex; align-items:center; gap:12px;">
     <label style="margin:0; white-space:nowrap;">YOUR TEAM</label>
     <input type="text" id="my-team" placeholder="e.g. Maryland Sting 2031 - Peay" style="margin:0; flex:1;">
   </div>
@@ -455,7 +641,7 @@
   <div class="card">
     <h2>Game Details</h2>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div class="m-stack" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div>
         <label>Opponent</label>
         <input type="text" id="game-opponent" placeholder="e.g. Emmorton Eagles" style="margin-bottom:8px;">
@@ -480,7 +666,7 @@
       </div>
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div class="m-stack" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div>
         <label>Location</label>
         <input type="text" id="game-location" placeholder="e.g. Meadowbrook Athletic Complex" style="margin-bottom:8px;">
@@ -516,7 +702,7 @@
     <h2>Coach Notes</h2>
     <p style="color:var(--text2); font-size:13px; margin-bottom:12px;">The more detail you give, the better the report. Use jersey numbers.</p>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+    <div class="m-stack" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
       <div>
         <label>What Did They Run?</label>
         <textarea id="notes-opponent" placeholder="2-3 zone&#10;Triangle offense&#10;3-2 press&#10;Press break: pass to corner, over the top" style="min-height:80px;"></textarea>
@@ -527,7 +713,7 @@
       </div>
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+    <div class="m-stack" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
       <div>
         <label>What Worked?</label>
         <textarea id="notes-worked" placeholder="Full court press in Q3&#10;Baseline drives broke their zone&#10;Transition off steals" style="min-height:80px;"></textarea>
@@ -597,12 +783,12 @@
     <h2>Import Season Stats</h2>
     <p style="color:var(--text2); font-size:13px; margin-bottom:16px;">Upload a GameChanger season CSV export. Players persist across seasons — new players are added, returning players keep their history.</p>
 
-    <div style="display:flex; gap:12px; margin-bottom:12px;">
-      <div style="flex:1;">
+    <div class="m-stack" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
         <label>Season Name</label>
         <input type="text" id="season-name" placeholder="e.g. Fall 2025">
       </div>
-      <div style="flex:1;">
+      <div>
         <label>Team Name</label>
         <input type="text" id="season-team" placeholder="e.g. Maryland Sting - Peay 2031 13U">
       </div>
@@ -621,9 +807,9 @@
   </div>
 
   <!-- Season selector -->
-  <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px;">
+  <div class="m-stack-flex" style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px; gap:8px; flex-wrap:wrap;">
     <h2>Season</h2>
-    <select id="season-select" onchange="displaySeason(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px;">
+    <select id="season-select" onchange="displaySeason(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px; min-width:0; max-width:100%;">
       <option value="">— Select Season —</option>
     </select>
   </div>
@@ -674,9 +860,9 @@
   </div>
 
   <!-- League selector + display -->
-  <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 12px; gap:8px; flex-wrap:wrap;">
     <h2>League Standings</h2>
-    <select id="league-select" onchange="displayLeague(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px;">
+    <select id="league-select" onchange="displayLeague(this.value)" style="width:auto; margin:0; padding:8px 12px; font-size:14px; min-width:0; max-width:100%;">
       <option value="">— Select League —</option>
     </select>
   </div>
@@ -687,7 +873,7 @@
 
 <!-- ════════════ GAMES LIST PAGE ════════════ -->
 <div id="page-games" class="page">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
     <h2>Games</h2>
     <button class="btn btn-secondary" onclick="loadGames()" style="padding:8px 14px; font-size:13px;">Refresh</button>
   </div>
@@ -696,9 +882,9 @@
 
 <!-- ════════════ REPORTS PAGE ════════════ -->
 <div id="page-reports" class="page">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
     <h2>Reports</h2>
-    <div style="display:flex; gap:8px; align-items:center;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select id="report-type-filter" onchange="loadReports()" style="width:auto; margin:0; padding:6px 10px; font-size:13px;">
         <option value="">All Types</option>
         <option value="postgame">Postgame</option>
@@ -763,7 +949,7 @@
       </div>
     </div>
 
-    <div style="display:flex; gap:8px;">
+    <div class="m-stack-flex" style="display:flex; gap:8px;">
       <button class="btn btn-primary" style="flex:1;" onclick="scoutOpponent()">Scout (from our games)</button>
       <button class="btn" style="flex:1; background:#00c7be; color:#000; font-weight:600;" onclick="researchOpponent()">Research (web lookup)</button>
     </div>
@@ -783,18 +969,18 @@
 
     <!-- Quick add form (hidden by default) -->
     <div id="add-player-form" class="card" style="display:none; margin-bottom:12px; padding:14px;">
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <div style="flex:1;">
+      <div style="margin-bottom:8px;">
+        <div>
           <label style="font-size:11px;">Opponent Team</label>
           <input type="text" id="add-player-opponent" placeholder="e.g. Emmorton Eagles" style="margin:0;">
         </div>
       </div>
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <div style="width:80px;">
+      <div class="m-stack" style="display:grid; grid-template-columns:80px 1fr; gap:8px; margin-bottom:8px;">
+        <div>
           <label style="font-size:11px;">Jersey #</label>
           <input type="text" id="add-player-number" placeholder="#" style="margin:0;">
         </div>
-        <div style="flex:1;">
+        <div>
           <label style="font-size:11px;">Name (optional)</label>
           <input type="text" id="add-player-name" placeholder="Name" style="margin:0;">
         </div>
@@ -1551,18 +1737,18 @@ async function importLeague() {
     if (data.division) html += `<p style="color:var(--text2);">${data.division}</p>`;
 
     // Standings table
-    html += '<table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th></tr></thead><tbody>';
     data.teams.forEach(t => {
       const isUs = t.is_us ? 'style="background:rgba(79,143,247,0.1);"' : '';
       const marker = t.is_us ? ' ★' : '';
       html += `<tr ${isUs}><td>${t.rank}</td><td><strong>${t.team}${marker}</strong></td><td>${t.record}</td><td>${t.ppg}</td><td>${t.papg}</td><td>${t.avg_margin > 0 ? '+' : ''}${t.avg_margin}</td></tr>`;
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     // Comparisons
     if (data.comparisons && data.comparisons.length > 0) {
       html += '<h2 style="margin-top:20px;">Matchup Projections</h2>';
-      html += '<table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
       data.comparisons.forEach(c => {
         const color = c.assessment === 'Strong favorite' ? 'var(--green)' :
                       c.assessment === 'Favored' ? 'var(--accent)' :
@@ -1570,7 +1756,7 @@ async function importLeague() {
                       'var(--red)';
         html += `<tr><td>${c.opponent}</td><td>${c.their_record}</td><td>${c.their_avg_margin > 0 ? '+' : ''}${c.their_avg_margin}</td><td>${c.our_margin_vs_theirs > 0 ? '+' : ''}${c.our_margin_vs_theirs}</td><td style="color:${color};font-weight:600;">${c.assessment}</td></tr>`;
       });
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
     }
 
     reportEl.innerHTML = html;
@@ -1665,7 +1851,7 @@ async function displayLeague(leagueId) {
     const teams = data.teams || [];
     const hasGames = teams.some(t => t.game_results && t.game_results.length > 0);
 
-    html += '<table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th>';
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp PPG</th><th>+/-</th>';
     if (hasGames) html += '<th></th>';
     html += '</tr></thead><tbody>';
 
@@ -1704,12 +1890,12 @@ async function displayLeague(leagueId) {
         html += '</tbody></table></div></td></tr>';
       }
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     // Comparisons
     if (data.comparisons && data.comparisons.length > 0) {
       html += '<h2 style="margin-top:20px;">Matchup Projections</h2>';
-      html += '<table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
       data.comparisons.forEach(c => {
         const color = c.assessment === 'Strong favorite' ? 'var(--green)' :
                       c.assessment === 'Favored' ? 'var(--accent)' :
@@ -1717,7 +1903,7 @@ async function displayLeague(leagueId) {
                       'var(--red)';
         html += `<tr><td>${c.opponent}</td><td>${c.their_record}</td><td>${c.their_avg_margin > 0 ? '+' : ''}${c.their_avg_margin}</td><td>${c.our_margin_vs_theirs > 0 ? '+' : ''}${c.our_margin_vs_theirs}</td><td style="color:${color};font-weight:600;">${c.assessment}</td></tr>`;
       });
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
     }
 
     reportEl.innerHTML = html;
@@ -2295,6 +2481,28 @@ function applyInline(text) {
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`(.*?)`/g, '<code style="background:var(--surface2);padding:2px 5px;border-radius:3px;font-size:13px;">$1</code>');
 }
+
+// ── Responsive: tag inline-style grids for mobile stacking ──
+(function() {
+  // Find all direct child divs of .card that have inline grid-template-columns: 1fr 1fr
+  document.querySelectorAll('.card > div[style]').forEach(el => {
+    const s = el.getAttribute('style') || '';
+    if (s.includes('grid-template-columns') && s.includes('1fr 1fr') && !s.includes('auto-fit')) {
+      el.classList.add('m-stack');
+    }
+  });
+  // Also tag the "YOUR TEAM" card flex row and season name/team flex row
+  document.querySelectorAll('.card[style*="display:flex"][style*="align-items:center"]').forEach(el => {
+    el.classList.add('m-stack-flex');
+  });
+  document.querySelectorAll('div[style*="display:flex"][style*="gap:12px"]').forEach(el => {
+    const s = el.getAttribute('style') || '';
+    if (s.includes('flex:1') || el.children.length === 2) {
+      const kids = el.querySelectorAll('[style*="flex:1"]');
+      if (kids.length >= 2) el.classList.add('m-stack-flex');
+    }
+  });
+})();
 </script>
 
 </body>
