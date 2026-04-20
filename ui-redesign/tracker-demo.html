@@ -1,0 +1,181 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracker Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg:        '#0f1117',
+          surface:   '#1a1d27',
+          surface2:  '#242836',
+          border:    '#2e3345',
+          text:      '#e4e6ed',
+          text2:     '#9298a8',
+          sting:     '#dc2626',  // Primary brand red — aggressive, team pride
+          'sting-l': '#ef4444',  // Lighter red for hover
+          'sting-d': '#991b1b',  // Dark red (used as accent tint)
+          win:       '#34c759',  // Success / win green
+          loss:      '#fca5a5',  // Loss text — muted salmon, distinct from brand red
+          orange:    '#ff9f0a',  // Warnings / analyst
+          purple:    '#9382ff',  // Orchestrator / rebounder role
+          teal:      '#00c7be',  // Research / researcher agent
+        },
+        fontFamily: {
+          sans: ['-apple-system','BlinkMacSystemFont','SF Pro Display','Segoe UI','Roboto','sans-serif'],
+        },
+        boxShadow: {
+          'card': '0 1px 2px rgba(0,0,0,0.3)',
+          'sting': '0 0 0 3px rgba(220,38,38,0.25)',
+        },
+      }
+    }
+  }
+</script>
+<style>
+body { background: #0f1117; color: #e4e6ed; font-family: system-ui, -apple-system, sans-serif; padding: 24px; max-width: 640px; margin: 0 auto; }
+button { background: #dc2626; color: white; padding: 10px 16px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; margin: 4px; }
+
+  html, body { background:#0f1117; color:#e4e6ed; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif; -webkit-text-size-adjust:100%; }
+  body { margin:0; padding:0; min-height:100vh; }
+
+</style>
+</head>
+<body>
+<h1 class="text-2xl font-black mb-4">Agent Tracker Demo</h1>
+<div class="bg-surface border border-border rounded-xl p-4 md:p-5 space-y-3 mb-4">
+<div class="agent-progress overflow-hidden rounded-xl border border-border bg-bg/40" id="agent-progress">
+      <!-- Header: status line + overall progress bar -->
+      <div class="agent-progress-header px-4 py-3 border-b border-border bg-surface/30 transition-colors">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="status-dot" id="progress-status-dot"></div>
+            <div class="text-[13px] font-semibold text-text truncate" id="progress-status-text">Starting…</div>
+          </div>
+          <div class="text-[11px] font-mono text-text2 tabular-nums shrink-0 ml-2" id="progress-elapsed">0s</div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-bar-fill"></div>
+        </div>
+      </div>
+</div>
+<div class="flex flex-wrap gap-2 mt-4">
+  <button onclick="demoStart()">▶ Run Demo</button>
+  <button onclick="demoReset()">↻ Reset</button>
+  <button onclick="demoComplete()">✓ Force Complete</button>
+</div>
+
+<script>
+// Re-declare the tracker controller for the demo
+const SPINNER_SVG = '<svg class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 0 1 9 9"/></svg>';
+const CHECK_SVG   = '<svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const WAITING_DOT = '<div class="waiting-dot"></div>';
+const AGENT_LABELS = {
+  orchestrator:  'Routing…',
+  ingestion:     'Parsing game data…',
+  analyst:       'Finding patterns…',
+  researcher:    'Searching the web…',
+  report_writer: 'Writing your report…',
+};
+const TRACKERS = {
+  'agent-progress': { prefix: '', agents: ['orchestrator', 'ingestion', 'analyst', 'report_writer'], startTime: null, timerId: null },
+};
+function _fmtElapsed(s) { return s < 60 ? s+'s' : Math.floor(s/60)+'m '+(s%60<10?'0':'')+(s%60)+'s'; }
+function _visibleAgents(t) { return t.agents.filter(a => { const el = document.getElementById(t.prefix + 'step-' + a); return el && !el.hasAttribute('hidden'); }); }
+function _recomputeProgress(trackerId) {
+  const t = TRACKERS[trackerId]; if (!t) return;
+  const v = _visibleAgents(t);
+  const done = v.filter(a => document.getElementById(t.prefix+'step-'+a).classList.contains('done')).length;
+  const pct = v.length ? Math.round(done/v.length*100) : 0;
+  const fill = document.getElementById(t.prefix+'progress-bar-fill'); if (fill) fill.style.width = pct+'%';
+  const panel = document.getElementById(trackerId);
+  if (pct >= 100) {
+    panel.classList.add('all-done');
+    const text = document.getElementById(t.prefix+'progress-status-text');
+    if (text) { const s = t.startTime ? Math.floor((Date.now()-t.startTime)/1000) : 0; text.textContent = s>0?'Report ready · '+_fmtElapsed(s):'Report ready'; }
+    if (t.timerId) { clearInterval(t.timerId); t.timerId = null; }
+  }
+}
+function trackerReset(trackerId, vis) {
+  const t = TRACKERS[trackerId]; if (!t) return;
+  if (t.timerId) { clearInterval(t.timerId); t.timerId = null; }
+  t.startTime = null;
+  const panel = document.getElementById(trackerId); if (!panel) return;
+  panel.classList.add('hidden'); panel.classList.remove('all-done');
+  const vs = new Set(vis || t.agents);
+  t.agents.forEach(a => {
+    const st = document.getElementById(t.prefix+'step-'+a); if (!st) return;
+    st.classList.remove('active','done');
+    vs.has(a) ? st.removeAttribute('hidden') : st.setAttribute('hidden','');
+    const d = document.getElementById(t.prefix+'detail-'+a); if (d) d.textContent = 'Waiting';
+    const s = document.getElementById(t.prefix+'status-'+a); if (s) s.innerHTML = WAITING_DOT;
+  });
+  const f = document.getElementById(t.prefix+'progress-bar-fill'); if (f) f.style.width = '0%';
+  const tx = document.getElementById(t.prefix+'progress-status-text'); if (tx) tx.textContent = 'Starting…';
+  const el = document.getElementById(t.prefix+'progress-elapsed'); if (el) el.textContent = '0s';
+}
+function trackerSetAgent(trackerId, agent, step, detail) {
+  const t = TRACKERS[trackerId]; if (!t) return;
+  const se = document.getElementById(t.prefix+'step-'+agent); if (!se) return;
+  const p = document.getElementById(trackerId); p.classList.remove('hidden');
+  if (!t.startTime) {
+    t.startTime = Date.now();
+    const eel = document.getElementById(t.prefix+'progress-elapsed');
+    const tick = () => { if (!t.startTime) return; const s = Math.floor((Date.now()-t.startTime)/1000); if (eel) eel.textContent = _fmtElapsed(s); };
+    tick(); t.timerId = setInterval(tick, 500);
+  }
+  const sel = document.getElementById(t.prefix+'status-'+agent);
+  const del = document.getElementById(t.prefix+'detail-'+agent);
+  const ht = document.getElementById(t.prefix+'progress-status-text');
+  if (step === 'done' || step === 'complete') {
+    se.classList.remove('active'); se.classList.add('done');
+    if (sel) sel.innerHTML = CHECK_SVG;
+  } else {
+    se.classList.remove('done'); se.classList.add('active');
+    if (sel) sel.innerHTML = SPINNER_SVG;
+    if (ht && !p.classList.contains('all-done')) ht.textContent = AGENT_LABELS[agent] || 'Processing…';
+  }
+  if (del && detail) del.textContent = detail;
+  _recomputeProgress(trackerId);
+}
+function trackerComplete(trackerId) {
+  const t = TRACKERS[trackerId]; if (!t) return;
+  _visibleAgents(t).forEach(a => {
+    const st = document.getElementById(t.prefix+'step-'+a);
+    if (st && !st.classList.contains('done')) {
+      st.classList.remove('active'); st.classList.add('done');
+      const sl = document.getElementById(t.prefix+'status-'+a);
+      if (sl) sl.innerHTML = CHECK_SVG;
+    }
+  });
+  _recomputeProgress(trackerId);
+}
+
+// Demo driver
+async function demoStart() {
+  trackerReset('agent-progress');
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await wait(300);
+  trackerSetAgent('agent-progress', 'orchestrator', 'routing', 'Routing to Ingestion Agent');
+  await wait(1500);
+  trackerSetAgent('agent-progress', 'orchestrator', 'done', 'Routed · handed off');
+  trackerSetAgent('agent-progress', 'ingestion', 'working', 'Parsing box score…');
+  await wait(1000);
+  trackerSetAgent('agent-progress', 'ingestion', 'working', 'Extracted 24 plays, 4 quarters');
+  await wait(1200);
+  trackerSetAgent('agent-progress', 'ingestion', 'done', 'Parsed 62-45 W over Bengals');
+  trackerSetAgent('agent-progress', 'analyst', 'working', 'Analyzing shooting splits…');
+  await wait(1200);
+  trackerSetAgent('agent-progress', 'analyst', 'working', 'Found pattern: 73% of runs came in Q2-Q3');
+  await wait(1500);
+  trackerSetAgent('agent-progress', 'analyst', 'done', '12 insights extracted');
+  trackerSetAgent('agent-progress', 'report_writer', 'working', 'Drafting narrative…');
+  await wait(1800);
+  trackerSetAgent('agent-progress', 'report_writer', 'working', 'Generating adjustments section…');
+  await wait(1200);
+  trackerSetAgent('agent-progress', 'report_writer', 'done', 'Report written · 847 words');
+}
+function demoReset() { trackerReset('agent-progress'); }
+function demoComplete() { trackerComplete('agent-progress'); }
+</script>
+</body></html>

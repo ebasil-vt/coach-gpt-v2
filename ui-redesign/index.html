@@ -1,0 +1,2745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#09090b">
+<title>CoachGPT — Maryland Sting</title>
+
+<!-- Critical pre-paint styles so we don't flash white before Tailwind loads -->
+<style>
+  html, body {
+    background:#09090b;
+    color:#f0f0f3;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    -webkit-text-size-adjust:100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    margin:0; padding:0; min-height:100vh;
+    background-color: #09090b;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(239,68,68,0.08), transparent 70%);
+    background-attachment: fixed;
+  }
+</style>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          // Surface hierarchy — darker = further back, lighter = closer
+          bg:        '#09090b',           // Level 0 — page bg (zinc-950)
+          surface:   '#111114',           // Level 1 — cards, panels
+          surface2:  '#1a1a1f',           // Level 2 — inputs, nested cards, hover
+          surface3:  '#222228',           // Level 3 — active states, dropdowns
+
+          // Borders: low-opacity white, not solid gray
+          border:    'rgba(255,255,255,0.06)',
+          'border-strong': 'rgba(255,255,255,0.10)',
+
+          // Text: off-white (never pure) + hierarchy via opacity
+          text:      '#f0f0f3',
+          text2:     'rgba(240,240,243,0.55)',
+          text3:     'rgba(240,240,243,0.35)',
+
+          // Brand red — sting — full scale
+          sting: {
+            DEFAULT: '#ef4444',           // 500 — primary accent
+            50:  '#fef2f2',
+            100: '#fee2e2',
+            200: '#fecaca',
+            300: '#fca5a5',
+            400: '#f87171',
+            500: '#ef4444',
+            600: '#dc2626',               // hover / pressed
+            700: '#b91c1c',
+            800: '#991b1b',
+            900: '#7f1d1d',
+            950: '#450a0a',
+          },
+          // Back-compat aliases (kept so existing classes work)
+          'sting-l': '#dc2626',           // used as "hover/pressed" — darker per spec
+          'sting-d': '#7f1d1d',           // very dark tint
+
+          // Semantic colors
+          win:       '#34d399',           // emerald-400 (wins, success)
+          loss:      '#fb7185',           // rose-400 — DISTINCT from brand red
+          warning:   '#fbbf24',           // amber-400
+          info:      '#fb923c',           // orange-400
+
+          // Report-type / agent accent colors
+          orange:    '#fb923c',           // orange-400 — analyst / scouting
+          purple:    '#a78bfa',           // violet-400 — orchestrator / league
+          teal:      '#22d3ee',           // cyan-400 — researcher / research
+          emerald:   '#34d399',           // pregame
+          cyan:      '#22d3ee',           // research
+          violet:    '#a78bfa',           // league
+          sky:       '#38bdf8',           // team identity
+          rose:      '#fb7185',           // loss / error
+          amber:     '#fbbf24',           // warning
+        },
+        fontFamily: {
+          sans: ['Inter','-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','system-ui','sans-serif'],
+        },
+        boxShadow: {
+          'sting-glow':   '0 0 20px rgba(239,68,68,0.15)',
+          'sting-glow-lg':'0 0 30px rgba(239,68,68,0.25)',
+          'inset-top':    'inset 0 1px 0 rgba(255,255,255,0.04)',
+        },
+        ringColor: {
+          DEFAULT: 'rgba(239,68,68,0.30)',
+        },
+      }
+    }
+  }
+</script>
+
+<!-- Custom CSS for behaviours Tailwind utilities can't express cleanly -->
+<style>
+  /* Page show/hide — used by showPage() */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Subtle noise overlay — organic texture that prevents the "flat void" feel.
+     Kept at 0.025 opacity — felt, not seen. */
+  .noise::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 182px;
+    opacity: 0.025;
+  }
+
+  /* Top-nav tab active state (desktop) — tinted pill, not solid red */
+  .nav-tab.active {
+    background-color: rgba(239,68,68,0.15);
+    color: #ef4444;
+  }
+
+  /* Bottom-nav tab active state (mobile) */
+  .nav-tab.bottom.active {
+    color: #ef4444;
+    background: transparent;
+  }
+  .nav-tab.bottom.active .tab-icon-wrap {
+    background-color: rgba(239,68,68,0.18);
+    color: #ef4444;
+  }
+  .nav-tab.bottom.active .tab-label { color: #ef4444; font-weight: 700; }
+
+  /* Fine spinner used by status banners */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display:inline-block; width:16px; height:16px;
+    border:2px solid #ef4444; border-top-color:transparent;
+    border-radius:50%; animation: spin 0.8s linear infinite;
+    margin-right:8px; vertical-align:middle;
+  }
+  /* Hide scrollbars on horizontal tab bars */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Upload zone — dashed border with subtle inner glow on hover */
+  .upload-zone {
+    position: relative;
+    border: 2px dashed rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(26,26,31,0.50);
+    transition: border-color 0.18s ease, background 0.18s ease;
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: rgba(239,68,68,0.45);
+    background: rgba(239,68,68,0.03);
+  }
+  .upload-zone input[type="file"] {
+    position:absolute; inset:0; opacity:0; cursor:pointer;
+  }
+
+  /* Insight-cell (2x2 screenshot grid) — MUST stay 2x2 on all viewports */
+  .insight-cell {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border: 2px dashed rgba(255,255,255,0.10);
+    border-radius: 12px;
+    background: #1a1a1f;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.18s ease, background 0.18s ease;
+  }
+  .insight-cell:hover, .insight-cell.dragover {
+    border-color: rgba(239,68,68,0.45);
+    background: rgba(239,68,68,0.04);
+  }
+  .insight-cell input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
+  .insight-cell.has-file { border-style: solid; border-color: rgba(52,211,153,0.55); background: rgba(52,211,153,0.05); }
+  .insight-cell .thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+  .insight-cell.has-file .thumb { display:block; }
+  .insight-cell .check-badge {
+    position:absolute; top:6px; right:6px;
+    width:22px; height:22px; border-radius:50%;
+    background:#34d399; color:#09090b;
+    font-size:14px; font-weight:800;
+    display:none; align-items:center; justify-content:center;
+    z-index: 3;
+  }
+  .insight-cell.has-file .check-badge { display:flex; }
+  .insight-cell .cell-label {
+    position:absolute; top:6px; left:6px;
+    background: rgba(9,9,11,0.85);
+    color:#f0f0f3;
+    font-size:10px; font-weight:700;
+    padding: 3px 7px; border-radius: 5px;
+    letter-spacing: 0.5px;
+    z-index: 3;
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     Agent Progress — Premium AI Pipeline Visualization
+     ═══════════════════════════════════════════════════════ */
+  .agent-progress { transition: border-color 400ms ease; }
+  .agent-progress.all-done { border-color: rgba(52,211,153,0.35); }
+
+  /* Header: status line + progress bar */
+  .progress-bar-track {
+    height: 3px; border-radius: 999px;
+    background: rgba(255,255,255,0.06); overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #f87171 100%);
+    background-size: 200% 100%;
+    border-radius: 999px;
+    transition: width 650ms cubic-bezier(0.4, 0, 0.2, 1), background 400ms ease;
+    animation: bar-shimmer 2.5s linear infinite;
+  }
+  @keyframes bar-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: 0 0; }
+  }
+  .agent-progress.all-done .progress-bar-fill {
+    background: linear-gradient(90deg, #10b981, #34d399);
+    animation: none;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 999px;
+    background: #ef4444; flex-shrink: 0;
+    box-shadow: 0 0 0 0 rgba(239,68,68,0.55);
+    animation: status-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes status-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+    70%     { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+  }
+  .agent-progress.all-done .status-dot {
+    background: #34d399;
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(52,211,153,0.18);
+  }
+
+  /* Agent step: per-agent color via CSS custom property (R G B triplet for rgb() / color-mix) */
+  .agent-step {
+    --ac: 240 240 243;                       /* default: text */
+    position: relative;
+    transition: background 300ms ease;
+  }
+  .agent-step[data-agent="orchestrator"]  { --ac: 167 139 250; }  /* violet-400 */
+  .agent-step[data-agent="ingestion"]     { --ac: 239 68 68; }    /* sting-500 */
+  .agent-step[data-agent="analyst"]       { --ac: 251 146 60; }   /* orange-400 */
+  .agent-step[data-agent="researcher"]    { --ac: 34 211 238; }   /* cyan-400 */
+  .agent-step[data-agent="report_writer"] { --ac: 52 211 153; }   /* emerald-400 */
+  .agent-step[hidden] { display: none; }
+
+  /* Connector: line from THIS icon-bottom to NEXT icon-top.
+     With 16px padding + 36px icon: icon-bottom at 52px.
+     Height calc(100% - 36px) lands at next icon top (16px below the next step's top). */
+  .agent-step::before {
+    content: '';
+    position: absolute;
+    left: 33px;
+    top: 52px;
+    width: 2px;
+    height: calc(100% - 36px);
+    background: rgba(255,255,255,0.06);
+    z-index: 0;
+    pointer-events: none;
+    transition: background 500ms ease;
+  }
+  .agent-step:last-child::before { display: none; }
+  .agent-step.active::before { background: rgb(var(--ac) / 0.35); }
+  .agent-step.done::before   { background: #34d399; }
+
+  /* Icon badge */
+  .agent-icon {
+    position: relative;
+    z-index: 1;
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    background: #1a1a1f;
+    color: rgba(240,240,243,0.35);
+    border: 1.5px solid rgba(255,255,255,0.08);
+    transition: background 300ms ease, color 300ms ease, border-color 300ms ease;
+  }
+  .agent-icon svg { width: 18px; height: 18px; display: block; }
+  .agent-step.active .agent-icon {
+    background: rgb(var(--ac) / 0.15);
+    color: rgb(var(--ac));
+    border-color: rgb(var(--ac) / 0.45);
+    animation: agent-glow 2s ease-in-out infinite;
+  }
+  .agent-step.done .agent-icon {
+    background: rgb(var(--ac) / 0.12);
+    color: rgb(var(--ac));
+    border-color: rgb(var(--ac) / 0.3);
+  }
+  @keyframes agent-glow {
+    0%,100% { box-shadow: 0 0 0 0 rgb(var(--ac) / 0.45); }
+    50%     { box-shadow: 0 0 0 8px rgb(var(--ac) / 0); }
+  }
+
+  /* Agent name */
+  .agent-name {
+    font-size: 10px; font-weight: 900;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: rgba(240,240,243,0.35);
+    margin-bottom: 2px;
+    transition: color 300ms ease;
+  }
+  .agent-step.active .agent-name,
+  .agent-step.done   .agent-name { color: rgb(var(--ac)); }
+  .agent-step.done   .agent-name { opacity: 0.9; }
+
+  /* Agent detail text */
+  .agent-detail {
+    font-size: 13px; line-height: 1.35;
+    color: rgba(240,240,243,0.35);
+    transition: color 300ms ease;
+  }
+  .agent-step.active .agent-detail { color: #f0f0f3; }
+  .agent-step.done   .agent-detail { color: rgba(240,240,243,0.55); }
+
+  /* Right-side status icon: waiting dot / spinner / check */
+  .agent-status {
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 8px;
+  }
+  .agent-status svg { width: 16px; height: 16px; display: block; }
+  .waiting-dot {
+    width: 6px; height: 6px; border-radius: 999px;
+    background: rgba(255,255,255,0.10);
+  }
+  .spinner-icon {
+    color: rgb(var(--ac));
+    animation: ai-spin 900ms linear infinite;
+    transform-origin: center;
+  }
+  @keyframes ai-spin { to { transform: rotate(360deg); } }
+  .check-icon {
+    color: #34d399;
+    animation: check-pop 450ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  @keyframes check-pop {
+    0%   { transform: scale(0);    opacity: 0; }
+    60%  { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1);    opacity: 1; }
+  }
+
+  /* Completion celebration: subtle gradient wash on header */
+  .agent-progress.all-done .agent-progress-header {
+    background: linear-gradient(135deg, rgba(52,211,153,0.08), rgba(52,211,153,0.02));
+  }
+
+  /* Status banners — tinted-background pattern (Supabase style) */
+  .status { display:none; padding:12px 16px; border-radius:10px; margin:12px 0; font-size:14px; }
+  .status.loading { display:block; background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.20); color:#ef4444; }
+  .status.success { display:block; background:rgba(52,211,153,0.10); border:1px solid rgba(52,211,153,0.20); color:#34d399; }
+  .status.error   { display:block; background:rgba(251,113,133,0.10); border:1px solid rgba(251,113,133,0.20); color:#fb7185; }
+
+  /* Report display — markdown output */
+  .report-display { display:none; }
+  .report-display.visible {
+    display:block;
+    background:#111114; border:1px solid rgba(255,255,255,0.06);
+    border-radius:12px; padding:24px; margin-top:16px;
+    line-height:1.7; color:#f0f0f3;
+  }
+  .report-display h1 { font-size:22px; margin:18px 0 12px; color:#ef4444; font-weight:700; letter-spacing:-0.02em; }
+  .report-display h2 { font-size:18px; margin:18px 0 10px; color:#f0f0f3; font-weight:600; letter-spacing:-0.01em; }
+  .report-display h3 { font-size:13px; margin:14px 0 8px; color:rgba(240,240,243,0.55); font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+  .report-display p  { margin-bottom:10px; color:#f0f0f3; }
+  .report-display ul, .report-display ol { margin:8px 0 12px 22px; }
+  .report-display li { margin-bottom:6px; }
+  .report-display strong { color:#ef4444; font-weight:700; }
+  .report-display em { color:#f0f0f3; }
+  .report-display code { background:#1a1a1f; padding:2px 6px; border-radius:4px; font-size:13px; color:#f0f0f3; border:1px solid rgba(255,255,255,0.06); }
+  .report-display table { width:100%; border-collapse:collapse; margin:12px 0; font-size:13px; }
+  .report-display th, .report-display td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); text-align:left; }
+  .report-display th { background:rgba(255,255,255,0.02); font-weight:600; color:rgba(240,240,243,0.55); text-transform:uppercase; font-size:11px; letter-spacing:0.05em; border-bottom:1px solid rgba(255,255,255,0.08); }
+  .report-display tr:hover td { background:rgba(255,255,255,0.02); }
+  .report-display hr  { border:none; border-top:1px solid rgba(255,255,255,0.06); margin:16px 0; }
+  .report-display blockquote { border-left:3px solid #ef4444; padding:8px 14px; margin:10px 0; color:rgba(240,240,243,0.55); font-style:italic; background:rgba(239,68,68,0.04); border-radius:4px; }
+  @media (max-width: 640px) {
+    .report-display { padding:16px; border-radius:10px; }
+    .report-display h1 { font-size:20px; }
+    .report-display h2 { font-size:16px; }
+    .report-display table { display:block; overflow-x:auto; white-space:nowrap; }
+    .report-display th, .report-display td { padding:6px 8px; font-size:12px; }
+  }
+
+  /* Form controls — premium dark styling */
+  input[type="text"], input[type="date"], input[type="number"], textarea, select {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1a1a1f;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    color: #f0f0f3;
+    font-size: 15px;
+    font-family: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="text"]:hover, input[type="date"]:hover, input[type="number"]:hover,
+  textarea:hover, select:hover {
+    border-color: rgba(255,255,255,0.15);
+  }
+  input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus,
+  textarea:focus, select:focus {
+    outline: none;
+    border-color: rgba(239,68,68,0.60);
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.15);
+    background: #1a1a1f;
+  }
+  input::placeholder, textarea::placeholder { color: rgba(240,240,243,0.30); }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.5; padding-top: 12px; padding-bottom: 12px; }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a1a1aa' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); opacity:0.7; }
+
+  /* Safe-area padding for iOS home bar */
+  .pb-safe { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /* Print styles — reports only */
+  @media print {
+    body { background:#fff !important; color:#000 !important; background-image:none !important; }
+    body::before { display:none !important; }
+    nav, #bottom-nav, .card, .upload-zone, .status, .agent-progress,
+    button, input, select, textarea, #opp-players-section, #opponents-list { display:none !important; }
+    .page .card { display:none !important; }
+    .page { padding:0 !important; }
+    .report-display, .report-display.visible {
+      display:block !important; border:none !important;
+      background:#fff !important; color:#000 !important;
+      padding:0 !important; margin:0 !important;
+      font-size:12pt; line-height:1.5;
+    }
+    .report-display h1 { color:#000 !important; font-size:18pt; }
+    .report-display h2 { color:#333 !important; font-size:14pt; }
+    .report-display h3 { color:#555 !important; font-size:12pt; }
+    .report-display p, .report-display li, .report-display strong, .report-display em { color:#000 !important; }
+    .report-display table { border-color:#ccc !important; }
+    .report-display th { background:#f0f0f0 !important; color:#000 !important; }
+    .report-display td { color:#000 !important; border-color:#ccc !important; }
+  }
+</style>
+</head>
+<body class="noise bg-bg text-text font-sans min-h-screen antialiased">
+
+<!-- ════════════ TOP NAV BAR ════════════ -->
+<nav class="sticky top-0 z-40 bg-surface/95 backdrop-blur border-b border-border">
+  <div class="max-w-5xl mx-auto flex items-center justify-between px-4 md:px-6 py-3 gap-3">
+    <!-- Brand -->
+    <div class="flex items-center gap-2.5 min-w-0 shrink-0">
+      <div class="w-8 h-8 rounded-lg bg-sting flex items-center justify-center shadow-sting-glow">
+        <span class="text-white font-black text-sm tracking-tight">S</span>
+      </div>
+      <div class="leading-tight min-w-0">
+        <div class="font-black text-[15px] md:text-base tracking-tight truncate">Coach<span class="text-sting">GPT</span></div>
+        <div class="text-[10px] md:text-xs text-text2 font-semibold uppercase tracking-wider truncate">Maryland Sting</div>
+      </div>
+    </div>
+
+    <!-- Desktop tabs -->
+    <div class="hidden md:flex items-center gap-1 overflow-x-auto no-scrollbar">
+      <button class="nav-tab active px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="new-game" onclick="showPage('new-game')">New Game</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="games" onclick="showPage('games')">Games</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="scout" onclick="showPage('scout')">Scout</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="reports" onclick="showPage('reports')">Reports</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="team" onclick="showPage('team')">Team</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="league" onclick="showPage('league')">League</button>
+      <button class="nav-tab px-4 py-2 rounded-lg text-sm font-semibold text-text2 hover:bg-surface2 hover:text-text transition-colors whitespace-nowrap" data-page="guide" onclick="showPage('guide')">Guide</button>
+    </div>
+
+    <!-- User status -->
+    <div id="user-status" class="flex items-center gap-2 text-xs text-text2 shrink-0">
+      <span id="user-name" class="hidden sm:inline max-w-[120px] truncate"></span>
+      <a id="sign-out-link" href="/logout" class="hidden px-2.5 py-1 border border-border rounded-md text-xs font-semibold text-text2 hover:text-sting hover:border-sting transition-colors">Sign Out</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════════ MAIN CONTENT ════════════ -->
+<main class="max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6 pb-safe md:pb-10">
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 1: NEW GAME (most important page — optimized for courtside)
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-new-game" class="page active space-y-3 md:space-y-4">
+
+  <!-- Your Team (persistent, compact) -->
+  <div class="bg-surface border border-border rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+    <label for="my-team" class="text-[11px] font-bold text-text2 uppercase tracking-wider shrink-0 sm:w-24">Your Team</label>
+    <input type="text" id="my-team" placeholder="Maryland Sting 2031 - Peay" class="!py-2 !text-sm !border-transparent !bg-surface2">
+  </div>
+
+  <!-- Game Details card -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <h2 class="text-base font-bold mb-4">Game Details</h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+      <div>
+        <label for="game-opponent" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Opponent</label>
+        <input type="text" id="game-opponent" placeholder="Emmorton Eagles">
+      </div>
+      <div>
+        <label for="game-date" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Date</label>
+        <input type="date" id="game-date">
+      </div>
+    </div>
+
+    <!-- Score entry — emotional centerpiece -->
+    <label class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-2">Final Score</label>
+    <div class="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 mb-4">
+      <div class="bg-surface2 border border-border rounded-xl px-2 py-2 flex flex-col items-center">
+        <div class="text-[10px] font-bold text-sting uppercase tracking-widest mt-1">US</div>
+        <input type="number" inputmode="numeric" id="game-our-score" placeholder="0"
+               class="!border-transparent !bg-transparent !text-center !text-4xl sm:!text-5xl !font-black !text-white !p-1 !shadow-none focus:!shadow-none focus:!bg-sting/5 tabular-nums">
+      </div>
+      <div class="flex items-center justify-center w-8">
+        <div class="text-2xl font-black text-text2">–</div>
+      </div>
+      <div class="bg-surface2 border border-border rounded-xl px-2 py-2 flex flex-col items-center">
+        <div class="text-[10px] font-bold text-text2 uppercase tracking-widest mt-1">THEM</div>
+        <input type="number" inputmode="numeric" id="game-opp-score" placeholder="0"
+               class="!border-transparent !bg-transparent !text-center !text-4xl sm:!text-5xl !font-black !text-text !p-1 !shadow-none focus:!shadow-none focus:!bg-sting/5 tabular-nums">
+      </div>
+    </div>
+    <!-- Auto-updated W/L indicator -->
+    <div id="score-indicator" class="hidden mb-4 text-center">
+      <span id="score-indicator-badge" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider"></span>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label for="game-location" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Location</label>
+        <input type="text" id="game-location" placeholder="Meadowbrook Athletic Complex">
+      </div>
+      <div>
+        <label for="game-type" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Game Type</label>
+        <select id="game-type">
+          <option value="league">League</option>
+          <option value="tournament">Tournament</option>
+          <option value="scrimmage">Scrimmage</option>
+          <option value="playoff">Playoff</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Recap (NEW) -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <div>
+        <h2 class="text-base font-bold">Game Recap</h2>
+        <p class="text-xs text-text2 mt-0.5">Copy the story recap from GameChanger app or web</p>
+      </div>
+      <span class="text-[10px] font-bold text-text2 uppercase tracking-wider px-2 py-0.5 border border-border rounded-full shrink-0">Optional</span>
+    </div>
+    <textarea id="game-recap" placeholder="Paste the GameChanger match recap here..." class="min-h-[100px]"></textarea>
+  </div>
+
+  <!-- Box Score Upload -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-base font-bold">Box Score</h2>
+        <p class="text-xs text-text2 mt-0.5">Upload for player-level stats. Skip if notes-only.</p>
+      </div>
+      <span class="text-[10px] font-bold text-text2 uppercase tracking-wider px-2 py-0.5 border border-border rounded-full shrink-0">Optional</span>
+    </div>
+
+    <div class="upload-zone" id="upload-zone">
+      <div class="text-3xl text-text2 mb-1">+</div>
+      <p class="text-sm font-semibold text-text">Upload box score</p>
+      <p class="text-[11px] text-text2 mt-1">GameChanger PDF, screenshot, CSV, or text file</p>
+      <div class="filename text-win text-sm font-bold mt-2" id="file-name"></div>
+      <input type="file" id="file-input" accept=".pdf,.csv,.txt,.png,.jpg,.jpeg,.webp">
+    </div>
+  </div>
+
+  <!-- Game Insights (NEW — 2x2 screenshot grid, ALWAYS 2x2) -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <div class="flex items-start justify-between gap-3 mb-1">
+      <div>
+        <h2 class="text-base font-bold">Game Insights</h2>
+        <p class="text-xs text-text2 mt-0.5">Screenshot insights from GameChanger app (can't copy-paste from the app)</p>
+      </div>
+      <span class="text-[10px] font-bold text-text2 uppercase tracking-wider px-2 py-0.5 border border-border rounded-full shrink-0">Optional</span>
+    </div>
+
+    <!-- 2x2 grid — NEVER stack to 1 column -->
+    <div class="grid grid-cols-2 gap-2 md:gap-3 mt-3">
+      <label class="insight-cell" data-insight="sting-h1">
+        <span class="cell-label">🏀 Sting H1</span>
+        <div class="text-2xl text-text2">+</div>
+        <div class="text-[11px] text-text2 mt-1">Tap to upload</div>
+        <img class="thumb" alt="">
+        <span class="check-badge">✓</span>
+        <input type="file" id="insight-sting-h1" accept="image/png,image/jpeg,image/jpg,image/webp">
+      </label>
+      <label class="insight-cell" data-insight="sting-h2">
+        <span class="cell-label">🏀 Sting H2</span>
+        <div class="text-2xl text-text2">+</div>
+        <div class="text-[11px] text-text2 mt-1">Tap to upload</div>
+        <img class="thumb" alt="">
+        <span class="check-badge">✓</span>
+        <input type="file" id="insight-sting-h2" accept="image/png,image/jpeg,image/jpg,image/webp">
+      </label>
+      <label class="insight-cell" data-insight="opp-h1">
+        <span class="cell-label">⚔ Opp H1</span>
+        <div class="text-2xl text-text2">+</div>
+        <div class="text-[11px] text-text2 mt-1">Tap to upload</div>
+        <img class="thumb" alt="">
+        <span class="check-badge">✓</span>
+        <input type="file" id="insight-opp-h1" accept="image/png,image/jpeg,image/jpg,image/webp">
+      </label>
+      <label class="insight-cell" data-insight="opp-h2">
+        <span class="cell-label">⚔ Opp H2</span>
+        <div class="text-2xl text-text2">+</div>
+        <div class="text-[11px] text-text2 mt-1">Tap to upload</div>
+        <img class="thumb" alt="">
+        <span class="check-badge">✓</span>
+        <input type="file" id="insight-opp-h2" accept="image/png,image/jpeg,image/jpg,image/webp">
+      </label>
+    </div>
+  </div>
+
+  <!-- Coach Notes -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <h2 class="text-base font-bold">Coach Notes</h2>
+    <p class="text-xs text-text2 mb-3 mt-0.5">The more detail, the better the report. Use jersey numbers.</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+      <div>
+        <label for="notes-opponent" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">What Did They Run?</label>
+        <textarea id="notes-opponent" placeholder="2-3 zone&#10;Triangle offense&#10;3-2 press&#10;Press break: pass to corner" class="!min-h-[90px]"></textarea>
+      </div>
+      <div>
+        <label for="notes-players" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Opponent Player Tendencies</label>
+        <textarea id="notes-players" placeholder="#1 can shoot, scored most&#10;#10 can't handle pressure&#10;#7 best player, boards&#10;#13 drives, make him shoot" class="!min-h-[90px]"></textarea>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+      <div>
+        <label for="notes-worked" class="block text-[11px] font-bold text-win uppercase tracking-wider mb-1.5">What Worked?</label>
+        <textarea id="notes-worked" placeholder="Full court press Q3&#10;Baseline drives broke zone&#10;Transition off steals" class="!min-h-[90px]"></textarea>
+      </div>
+      <div>
+        <label for="notes-didnt" class="block text-[11px] font-bold text-loss uppercase tracking-wider mb-1.5">What Didn't Work?</label>
+        <textarea id="notes-didnt" placeholder="Too many turnovers&#10;Didn't match intensity&#10;3pt shooting off" class="!min-h-[90px]"></textarea>
+      </div>
+    </div>
+
+    <label for="notes-extra" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Additional Notes</label>
+    <textarea id="notes-extra" placeholder="Any other observations, key plays, adjustments..." class="!min-h-[70px]"></textarea>
+  </div>
+
+  <!-- Submit / Agent Progress -->
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5 space-y-3">
+    <div id="game-status" class="status"></div>
+
+    <div class="agent-progress hidden overflow-hidden rounded-xl border border-border bg-bg/40" id="agent-progress">
+      <!-- Header: status line + overall progress bar -->
+      <div class="agent-progress-header px-4 py-3 border-b border-border bg-surface/30 transition-colors">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="status-dot" id="progress-status-dot"></div>
+            <div class="text-[13px] font-semibold text-text truncate" id="progress-status-text">Starting…</div>
+          </div>
+          <div class="text-[11px] font-mono text-text2 tabular-nums shrink-0 ml-2" id="progress-elapsed">0s</div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-bar-fill"></div>
+        </div>
+      </div>
+      <!-- Pipeline steps -->
+      <div class="py-1">
+        <!-- Orchestrator -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="orchestrator" id="step-orchestrator">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="2.5"/>
+              <circle cx="5" cy="5" r="1.6"/>
+              <circle cx="19" cy="5" r="1.6"/>
+              <circle cx="5" cy="19" r="1.6"/>
+              <circle cx="19" cy="19" r="1.6"/>
+              <line x1="6.5" y1="6.5" x2="10.3" y2="10.3"/>
+              <line x1="17.5" y1="6.5" x2="13.7" y2="10.3"/>
+              <line x1="6.5" y1="17.5" x2="10.3" y2="13.7"/>
+              <line x1="17.5" y1="17.5" x2="13.7" y2="13.7"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Orchestrator</div>
+            <div class="agent-detail" id="detail-orchestrator">Waiting</div>
+          </div>
+          <div class="agent-status" id="status-orchestrator"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Ingestion -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="ingestion" id="step-ingestion">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v11"/>
+              <polyline points="7 9 12 14 17 9"/>
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Ingestion</div>
+            <div class="agent-detail" id="detail-ingestion">Waiting</div>
+          </div>
+          <div class="agent-status" id="status-ingestion"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Analyst -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="analyst" id="step-analyst">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/>
+              <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+              <line x1="8" y1="12" x2="8" y2="10.5"/>
+              <line x1="10.5" y1="12" x2="10.5" y2="8"/>
+              <line x1="13" y1="12" x2="13" y2="9.5"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Game Analyst</div>
+            <div class="agent-detail" id="detail-analyst">Waiting</div>
+          </div>
+          <div class="agent-status" id="status-analyst"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Report Writer -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="report_writer" id="step-report_writer">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Report Writer</div>
+            <div class="agent-detail" id="detail-report_writer">Waiting</div>
+          </div>
+          <div class="agent-status" id="status-report_writer"><div class="waiting-dot"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <button id="submit-btn" onclick="submitGame()"
+            class="w-full min-h-[52px] rounded-xl bg-sting hover:bg-sting-l active:scale-[0.99] transition-all text-white font-semibold text-base tracking-wide disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none shadow-sting-glow hover:shadow-sting-glow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sting/30 focus-visible:ring-offset-2 focus-visible:ring-offset-bg">
+      Process Game →
+    </button>
+  </div>
+
+  <div class="report-display" id="game-report"></div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 2: TEAM
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-team" class="page space-y-4">
+
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <h2 class="text-base font-bold mb-1">Import Season Stats</h2>
+    <p class="text-xs text-text2 mb-4">Upload a GameChanger season CSV export. Players persist across seasons — returning players keep their history.</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+      <div>
+        <label for="season-name" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Season Name</label>
+        <input type="text" id="season-name" placeholder="Fall 2025">
+      </div>
+      <div>
+        <label for="season-team" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Team Name</label>
+        <input type="text" id="season-team" placeholder="Maryland Sting - Peay 2031 13U">
+      </div>
+    </div>
+
+    <div class="upload-zone mb-3" id="season-upload-zone">
+      <div class="text-2xl text-text2 mb-1">+</div>
+      <p class="text-sm font-semibold text-text">Upload GameChanger Season CSV</p>
+      <div class="filename text-win text-sm font-bold mt-2" id="season-file-name"></div>
+      <input type="file" id="season-file-input" accept=".csv">
+    </div>
+
+    <div id="import-status" class="status"></div>
+
+    <button onclick="importSeason()" class="w-full min-h-[48px] rounded-xl bg-sting hover:bg-sting-l text-white font-bold transition-colors">
+      Import Season
+    </button>
+  </div>
+
+  <!-- Season selector -->
+  <div class="flex items-center justify-between gap-3 pt-2">
+    <h2 class="text-lg font-bold">Season</h2>
+    <select id="season-select" onchange="displaySeason(this.value)" class="!w-auto !py-2 !px-3 !text-sm min-w-0 max-w-[65%]">
+      <option value="">— Select Season —</option>
+    </select>
+  </div>
+
+  <div id="season-data" style="display:none;" class="space-y-4">
+
+    <div class="bg-surface border border-border rounded-xl p-4 md:p-5" id="team-summary-card">
+      <h2 class="text-base font-bold mb-1" id="team-summary-title">Team Summary</h2>
+      <div id="team-summary"></div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3 pt-2">
+      <h3 class="text-xs font-black uppercase tracking-wider text-text2">Team Identity</h3>
+      <button id="identity-btn" onclick="generateTeamIdentity()" class="px-3 py-2 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+        Generate Report (~$0.05)
+      </button>
+    </div>
+    <div id="identity-status" class="status"></div>
+    <div class="report-display" id="identity-report"></div>
+
+    <h3 class="text-xs font-black uppercase tracking-wider text-text2 pt-2">Roster</h3>
+    <div id="roster-list" class="space-y-3"></div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 3: LEAGUE
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-league" class="page space-y-4">
+
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <h2 class="text-base font-bold mb-1">Import League Standings</h2>
+    <p class="text-xs text-text2 mb-4">Paste standings from HCRPS or upload a webarchive/PDF of the schedule page.</p>
+
+    <label for="league-season-name" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Season / League Name</label>
+    <input type="text" id="league-season-name" placeholder="Winter 2025-2026 — 7th Grade Alliance" class="mb-3">
+
+    <div class="upload-zone mb-3" id="league-upload-zone">
+      <div class="text-2xl text-text2 mb-1">+</div>
+      <p class="text-sm font-semibold text-text">Upload webarchive, PDF, or text file</p>
+      <div class="filename text-win text-sm font-bold mt-2" id="league-file-name"></div>
+      <input type="file" id="league-file-input" accept=".webarchive,.pdf,.txt,.csv">
+    </div>
+
+    <label for="league-text" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Or Paste Standings Text</label>
+    <textarea id="league-text" placeholder="Paste standings here — from hcrpsports.org Select All → Copy → Paste." class="!min-h-[90px] mb-3"></textarea>
+
+    <div id="league-status" class="status"></div>
+    <button onclick="importLeague()" class="w-full min-h-[48px] rounded-xl bg-sting hover:bg-sting-l text-white font-bold transition-colors">
+      Import League Data
+    </button>
+  </div>
+
+  <div class="flex items-center justify-between gap-3 pt-2">
+    <h2 class="text-lg font-bold">League Standings</h2>
+    <select id="league-select" onchange="displayLeague(this.value)" class="!w-auto !py-2 !px-3 !text-sm min-w-0 max-w-[60%]">
+      <option value="">— Select League —</option>
+    </select>
+  </div>
+
+  <div class="report-display" id="league-report"></div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 4: GAMES LIST
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-games" class="page space-y-3">
+  <div class="flex items-center justify-between gap-3">
+    <h2 class="text-lg md:text-xl font-bold">Games</h2>
+    <button onclick="loadGames()" class="px-3 py-2 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+      ↻ Refresh
+    </button>
+  </div>
+  <div id="games-list" class="space-y-2"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 5: REPORTS
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-reports" class="page space-y-3">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+    <h2 class="text-lg md:text-xl font-bold">Reports</h2>
+    <div class="flex items-center gap-2">
+      <select id="report-type-filter" onchange="loadReports()" class="!w-auto !py-2 !px-3 !text-sm flex-1 sm:flex-initial">
+        <option value="">All Types</option>
+        <option value="postgame">Postgame</option>
+        <option value="scouting">Scouting</option>
+        <option value="pregame">Pre-Game</option>
+        <option value="research">Research</option>
+        <option value="league_standings">League</option>
+        <option value="team_identity">Team ID</option>
+      </select>
+      <button onclick="loadReports()" class="px-3 py-2 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+        ↻ Refresh
+      </button>
+    </div>
+  </div>
+  <div id="reports-list" class="space-y-2"></div>
+
+  <div class="report-display" id="report-viewer"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 6: SCOUT
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-scout" class="page space-y-4">
+
+  <div class="bg-surface border border-border rounded-xl p-4 md:p-5">
+    <h2 class="text-base font-bold mb-3">Scout an Opponent</h2>
+
+    <label for="scout-opponent" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Opponent Name</label>
+    <input type="text" id="scout-opponent" placeholder="Lincoln High" class="mb-3">
+
+    <label for="scout-league" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">League / Context <span class="text-text2 font-normal normal-case tracking-normal">(optional)</span></label>
+    <input type="text" id="scout-league" placeholder="HCRPS basketball 13U, Howard County" class="mb-3">
+
+    <div id="scout-status" class="status"></div>
+
+    <div class="agent-progress hidden overflow-hidden rounded-xl border border-border bg-bg/40 mb-3" id="scout-agent-progress">
+      <!-- Header: status line + overall progress bar -->
+      <div class="agent-progress-header px-4 py-3 border-b border-border bg-surface/30 transition-colors">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="status-dot" id="scout-progress-status-dot"></div>
+            <div class="text-[13px] font-semibold text-text truncate" id="scout-progress-status-text">Starting…</div>
+          </div>
+          <div class="text-[11px] font-mono text-text2 tabular-nums shrink-0 ml-2" id="scout-progress-elapsed">0s</div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="scout-progress-bar-fill"></div>
+        </div>
+      </div>
+      <!-- Pipeline steps -->
+      <div class="py-1">
+        <!-- Orchestrator -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="orchestrator" id="scout-step-orchestrator">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="2.5"/>
+              <circle cx="5" cy="5" r="1.6"/>
+              <circle cx="19" cy="5" r="1.6"/>
+              <circle cx="5" cy="19" r="1.6"/>
+              <circle cx="19" cy="19" r="1.6"/>
+              <line x1="6.5" y1="6.5" x2="10.3" y2="10.3"/>
+              <line x1="17.5" y1="6.5" x2="13.7" y2="10.3"/>
+              <line x1="6.5" y1="17.5" x2="10.3" y2="13.7"/>
+              <line x1="17.5" y1="17.5" x2="13.7" y2="13.7"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Orchestrator</div>
+            <div class="agent-detail" id="scout-detail-orchestrator">Waiting</div>
+          </div>
+          <div class="agent-status" id="scout-status-orchestrator"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Researcher (web lookup) -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="researcher" id="scout-step-researcher">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <path d="M12 3c2.5 2.6 4 6.1 4 9s-1.5 6.4-4 9c-2.5-2.6-4-6.1-4-9s1.5-6.4 4-9z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Research Agent</div>
+            <div class="agent-detail" id="scout-detail-researcher">Waiting</div>
+          </div>
+          <div class="agent-status" id="scout-status-researcher"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Analyst -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="analyst" id="scout-step-analyst">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/>
+              <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+              <line x1="8" y1="12" x2="8" y2="10.5"/>
+              <line x1="10.5" y1="12" x2="10.5" y2="8"/>
+              <line x1="13" y1="12" x2="13" y2="9.5"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Game Analyst</div>
+            <div class="agent-detail" id="scout-detail-analyst">Waiting</div>
+          </div>
+          <div class="agent-status" id="scout-status-analyst"><div class="waiting-dot"></div></div>
+        </div>
+        <!-- Report Writer -->
+        <div class="agent-step flex items-start gap-3 p-4" data-agent="report_writer" id="scout-step-report_writer">
+          <div class="agent-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="agent-name">Report Writer</div>
+            <div class="agent-detail" id="scout-detail-report_writer">Waiting</div>
+          </div>
+          <div class="agent-status" id="scout-status-report_writer"><div class="waiting-dot"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <button onclick="scoutOpponent()" class="min-h-[48px] rounded-xl bg-sting hover:bg-sting-l text-white font-bold transition-colors">
+        Scout <span class="opacity-75 font-normal text-sm">(our games)</span>
+      </button>
+      <button onclick="researchOpponent()" class="min-h-[48px] rounded-xl bg-teal hover:bg-teal/80 text-black font-bold transition-colors">
+        Research <span class="opacity-75 font-normal text-sm">(web lookup)</span>
+      </button>
+    </div>
+  </div>
+
+  <div>
+    <h3 class="text-xs font-black uppercase tracking-wider text-text2 mb-2">Opponents in Database</h3>
+    <div id="opponents-list" class="space-y-2"></div>
+  </div>
+
+  <!-- Opponent Player Cards -->
+  <div id="opp-players-section" class="space-y-2">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-xs font-black uppercase tracking-wider text-text2">Opponent Player Scouting</h3>
+      <button onclick="toggleAddPlayer()" class="px-3 py-1.5 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+        + Add Player
+      </button>
+    </div>
+
+    <!-- Quick add form (hidden by default) -->
+    <div id="add-player-form" class="bg-surface border border-border rounded-xl p-4" style="display:none;">
+      <label for="add-player-opponent" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Opponent Team</label>
+      <input type="text" id="add-player-opponent" placeholder="Emmorton Eagles" class="mb-3">
+
+      <div class="grid grid-cols-[80px_1fr] gap-2 mb-3">
+        <div>
+          <label for="add-player-number" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Jersey #</label>
+          <input type="text" id="add-player-number" placeholder="#" class="!text-center !font-bold">
+        </div>
+        <div>
+          <label for="add-player-name" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Name <span class="font-normal normal-case tracking-normal text-text2">(optional)</span></label>
+          <input type="text" id="add-player-name" placeholder="Name">
+        </div>
+      </div>
+
+      <label for="add-player-tendencies" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Tendencies <span class="font-normal normal-case tracking-normal text-text2">(one per line)</span></label>
+      <textarea id="add-player-tendencies" placeholder="Can shoot from deep&#10;Weak going left&#10;Their primary ball handler" class="!min-h-[70px] mb-3"></textarea>
+
+      <button onclick="saveNewPlayer()" class="px-4 py-2 rounded-lg bg-sting hover:bg-sting-l text-white font-bold text-sm transition-colors">
+        Save Player
+      </button>
+      <div id="add-player-status" class="text-xs text-text2 mt-2"></div>
+    </div>
+
+    <div id="opp-players-list" class="space-y-2">
+      <p class="text-sm text-text2">No opponent players scouted yet. Process a game with coach notes or add manually above.</p>
+    </div>
+  </div>
+
+  <div class="report-display" id="scout-report"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     PAGE 7: GUIDE
+     ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-guide" class="page">
+  <div id="guide-content" class="report-display visible"></div>
+</div>
+
+</main>
+
+<!-- ════════════ MOBILE BOTTOM NAV (hidden on md+) ════════════ -->
+<nav id="bottom-nav" class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur border-t border-border mb-safe">
+  <div class="grid grid-cols-5 h-[64px]">
+    <button class="nav-tab bottom active flex flex-col items-center justify-center gap-1 text-text2 hover:text-text transition-colors" data-page="new-game" onclick="showPage('new-game')">
+      <div class="tab-icon-wrap w-9 h-7 rounded-full flex items-center justify-center text-base leading-none transition-colors">＋</div>
+      <div class="tab-label text-[10px] font-bold">New Game</div>
+    </button>
+    <button class="nav-tab bottom flex flex-col items-center justify-center gap-1 text-text2 hover:text-text transition-colors" data-page="games" onclick="showPage('games')">
+      <div class="tab-icon-wrap w-9 h-7 rounded-full flex items-center justify-center text-sm leading-none transition-colors">🏀</div>
+      <div class="tab-label text-[10px] font-bold">Games</div>
+    </button>
+    <button class="nav-tab bottom flex flex-col items-center justify-center gap-1 text-text2 hover:text-text transition-colors" data-page="scout" onclick="showPage('scout')">
+      <div class="tab-icon-wrap w-9 h-7 rounded-full flex items-center justify-center text-sm leading-none transition-colors">🎯</div>
+      <div class="tab-label text-[10px] font-bold">Scout</div>
+    </button>
+    <button class="nav-tab bottom flex flex-col items-center justify-center gap-1 text-text2 hover:text-text transition-colors" data-page="reports" onclick="showPage('reports')">
+      <div class="tab-icon-wrap w-9 h-7 rounded-full flex items-center justify-center text-sm leading-none transition-colors">📋</div>
+      <div class="tab-label text-[10px] font-bold">Reports</div>
+    </button>
+    <button id="more-btn" onclick="toggleMoreMenu()" class="flex flex-col items-center justify-center gap-1 text-text2 hover:text-text transition-colors">
+      <div class="tab-icon-wrap w-9 h-7 rounded-full flex items-center justify-center text-base leading-none transition-colors">⋯</div>
+      <div class="tab-label text-[10px] font-bold">More</div>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile "More" sheet -->
+<div id="more-sheet" class="md:hidden fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/60" onclick="toggleMoreMenu()"></div>
+  <div class="absolute bottom-0 inset-x-0 bg-surface border-t border-border rounded-t-2xl p-4 pb-safe space-y-2 mb-safe">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold text-lg">More</h3>
+      <button onclick="toggleMoreMenu()" class="w-8 h-8 rounded-full bg-surface2 flex items-center justify-center text-text2">✕</button>
+    </div>
+    <button class="nav-tab w-full text-left px-4 py-3 rounded-xl bg-surface2 border border-border font-semibold flex items-center gap-3" data-page="team" onclick="showPage('team'); toggleMoreMenu()">
+      <span class="w-8 h-8 rounded-lg bg-sting/15 text-sting flex items-center justify-center">👥</span>
+      <div>
+        <div>Team</div>
+        <div class="text-xs text-text2 font-normal">Season stats &amp; roster</div>
+      </div>
+    </button>
+    <button class="nav-tab w-full text-left px-4 py-3 rounded-xl bg-surface2 border border-border font-semibold flex items-center gap-3" data-page="league" onclick="showPage('league'); toggleMoreMenu()">
+      <span class="w-8 h-8 rounded-lg bg-sting/15 text-sting flex items-center justify-center">🏆</span>
+      <div>
+        <div>League</div>
+        <div class="text-xs text-text2 font-normal">Standings &amp; projections</div>
+      </div>
+    </button>
+    <button class="nav-tab w-full text-left px-4 py-3 rounded-xl bg-surface2 border border-border font-semibold flex items-center gap-3" data-page="guide" onclick="showPage('guide'); toggleMoreMenu()">
+      <span class="w-8 h-8 rounded-lg bg-sting/15 text-sting flex items-center justify-center">📖</span>
+      <div>
+        <div>Guide</div>
+        <div class="text-xs text-text2 font-normal">How to use CoachGPT</div>
+      </div>
+    </button>
+  </div>
+</div>
+
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// USER STATUS
+// ══════════════════════════════════════════════════════════════════════
+(async () => {
+  try {
+    const res = await fetch('/api/me');
+    const data = await res.json();
+    const nameEl = document.getElementById('user-name');
+    const signOutEl = document.getElementById('sign-out-link');
+    if (data.signed_in) {
+      nameEl.textContent = data.display_name;
+      nameEl.classList.remove('hidden');
+      nameEl.classList.add('text-win');
+      signOutEl.classList.remove('hidden');
+    }
+  } catch(e) {}
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// TEAM NAME PERSISTENCE
+// ══════════════════════════════════════════════════════════════════════
+const myTeamInput = document.getElementById('my-team');
+myTeamInput.value = localStorage.getItem('coachgpt_team') || '';
+myTeamInput.addEventListener('input', () => {
+  localStorage.setItem('coachgpt_team', myTeamInput.value);
+});
+
+// Default date to today
+document.getElementById('game-date').value = new Date().toISOString().split('T')[0];
+
+// ══════════════════════════════════════════════════════════════════════
+// LIVE W/L INDICATOR as coach types scores
+// ══════════════════════════════════════════════════════════════════════
+(function() {
+  const us = document.getElementById('game-our-score');
+  const them = document.getElementById('game-opp-score');
+  const ind = document.getElementById('score-indicator');
+  const badge = document.getElementById('score-indicator-badge');
+
+  function update() {
+    const u = parseInt(us.value), t = parseInt(them.value);
+    if (isNaN(u) || isNaN(t)) { ind.classList.add('hidden'); return; }
+    ind.classList.remove('hidden');
+    if (u > t) {
+      badge.className = 'inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider bg-win/15 text-win border border-win/30';
+      badge.textContent = `W  +${u - t}`;
+    } else if (u < t) {
+      badge.className = 'inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider bg-loss/10 text-loss border border-loss/20';
+      badge.textContent = `L  ${u - t}`;
+    } else {
+      badge.className = 'inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider bg-orange/15 text-orange border border-orange/30';
+      badge.textContent = 'TIE';
+    }
+  }
+  us.addEventListener('input', update);
+  them.addEventListener('input', update);
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// NAVIGATION — Preserves showPage() contract
+// ══════════════════════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  // Sync active state across desktop & mobile copies of the same tab
+  document.querySelectorAll('.nav-tab[data-page="' + name + '"]').forEach(t => t.classList.add('active'));
+
+  if (name === 'team') loadSeasons();
+  if (name === 'league') loadLeagues();
+  if (name === 'games') loadGames();
+  if (name === 'reports') loadReports();
+  if (name === 'scout') loadOpponents();
+  if (name === 'guide') loadGuide();
+
+  // Scroll to top of page on nav
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function toggleMoreMenu() {
+  const sheet = document.getElementById('more-sheet');
+  sheet.classList.toggle('hidden');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MAIN FILE UPLOAD (box score)
+// ══════════════════════════════════════════════════════════════════════
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+const fileName   = document.getElementById('file-name');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) fileName.textContent = '✓ ' + fileInput.files[0].name;
+});
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    fileInput.files = e.dataTransfer.files;
+    fileName.textContent = '✓ ' + e.dataTransfer.files[0].name;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// GAME INSIGHTS — 4 screenshot uploaders (NEW)
+// ══════════════════════════════════════════════════════════════════════
+const INSIGHT_IDS = ['sting-h1', 'sting-h2', 'opp-h1', 'opp-h2'];
+
+INSIGHT_IDS.forEach(id => {
+  const input = document.getElementById('insight-' + id);
+  const cell  = input.closest('.insight-cell');
+  const thumb = cell.querySelector('.thumb');
+
+  input.addEventListener('change', () => {
+    if (input.files.length > 0) {
+      const file = input.files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        thumb.src = e.target.result;
+        cell.classList.add('has-file');
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('dragover'); });
+  cell.addEventListener('dragleave', () => cell.classList.remove('dragover'));
+  cell.addEventListener('drop', (e) => {
+    e.preventDefault();
+    cell.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      input.files = e.dataTransfer.files;
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+function clearInsights() {
+  INSIGHT_IDS.forEach(id => {
+    const input = document.getElementById('insight-' + id);
+    const cell = input.closest('.insight-cell');
+    const thumb = cell.querySelector('.thumb');
+    input.value = '';
+    thumb.src = '';
+    cell.classList.remove('has-file');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// AGENT PROGRESS — Premium Pipeline Controller
+// ══════════════════════════════════════════════════════════════════════
+// Shared controller drives both trackers (new-game and scout).
+// Exposes the original resetProgress() / updateAgent() API for back-compat,
+// plus trackerReset / trackerSetAgent / trackerComplete for the scout flows.
+
+const SPINNER_SVG = '<svg class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 0 1 9 9"/></svg>';
+const CHECK_SVG   = '<svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const WAITING_DOT = '<div class="waiting-dot"></div>';
+
+const AGENT_LABELS = {
+  orchestrator:  'Routing…',
+  ingestion:     'Parsing game data…',
+  analyst:       'Finding patterns…',
+  researcher:    'Searching the web…',
+  report_writer: 'Writing your report…',
+};
+
+const TRACKERS = {
+  'agent-progress': {
+    prefix: '',
+    agents: ['orchestrator', 'ingestion', 'analyst', 'report_writer'],
+    startTime: null,
+    timerId: null,
+  },
+  'scout-agent-progress': {
+    prefix: 'scout-',
+    agents: ['orchestrator', 'researcher', 'analyst', 'report_writer'],
+    startTime: null,
+    timerId: null,
+  },
+};
+
+function _fmtElapsed(secs) {
+  if (secs < 60) return secs + 's';
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+}
+
+function _visibleAgents(t) {
+  return t.agents.filter(a => {
+    const el = document.getElementById(t.prefix + 'step-' + a);
+    return el && !el.hasAttribute('hidden');
+  });
+}
+
+function _recomputeProgress(trackerId) {
+  const t = TRACKERS[trackerId];
+  if (!t) return;
+  const visible = _visibleAgents(t);
+  const doneCount = visible.filter(a => {
+    const el = document.getElementById(t.prefix + 'step-' + a);
+    return el && el.classList.contains('done');
+  }).length;
+  const pct = visible.length > 0 ? Math.round((doneCount / visible.length) * 100) : 0;
+
+  const fill = document.getElementById(t.prefix + 'progress-bar-fill');
+  if (fill) fill.style.width = pct + '%';
+
+  const panel = document.getElementById(trackerId);
+  if (!panel) return;
+
+  if (pct >= 100) {
+    panel.classList.add('all-done');
+    const text = document.getElementById(t.prefix + 'progress-status-text');
+    if (text) {
+      const finalSecs = t.startTime ? Math.floor((Date.now() - t.startTime) / 1000) : 0;
+      text.textContent = finalSecs > 0 ? `Report ready · ${_fmtElapsed(finalSecs)}` : 'Report ready';
+    }
+    if (t.timerId) { clearInterval(t.timerId); t.timerId = null; }
+  }
+}
+
+function trackerReset(trackerId, visibleAgents) {
+  const t = TRACKERS[trackerId];
+  if (!t) return;
+
+  if (t.timerId) { clearInterval(t.timerId); t.timerId = null; }
+  t.startTime = null;
+
+  const panel = document.getElementById(trackerId);
+  if (!panel) return;
+  panel.classList.add('hidden');
+  panel.classList.remove('all-done');
+
+  const visibleSet = new Set(visibleAgents || t.agents);
+  t.agents.forEach(agent => {
+    const step = document.getElementById(t.prefix + 'step-' + agent);
+    if (!step) return;
+    step.classList.remove('active', 'done');
+    if (visibleSet.has(agent)) step.removeAttribute('hidden');
+    else step.setAttribute('hidden', '');
+
+    const detail = document.getElementById(t.prefix + 'detail-' + agent);
+    if (detail) detail.textContent = 'Waiting';
+    const status = document.getElementById(t.prefix + 'status-' + agent);
+    if (status) status.innerHTML = WAITING_DOT;
+  });
+
+  const fill = document.getElementById(t.prefix + 'progress-bar-fill');
+  if (fill) fill.style.width = '0%';
+  const text = document.getElementById(t.prefix + 'progress-status-text');
+  if (text) text.textContent = 'Starting…';
+  const elapsed = document.getElementById(t.prefix + 'progress-elapsed');
+  if (elapsed) elapsed.textContent = '0s';
+}
+
+function trackerSetAgent(trackerId, agent, step, detail) {
+  const t = TRACKERS[trackerId];
+  if (!t) return;
+  const stepEl = document.getElementById(t.prefix + 'step-' + agent);
+  if (!stepEl) return;
+
+  const panel = document.getElementById(trackerId);
+  panel.classList.remove('hidden');
+
+  // Lazy-start the elapsed timer on first signal
+  if (!t.startTime) {
+    t.startTime = Date.now();
+    const elapsedEl = document.getElementById(t.prefix + 'progress-elapsed');
+    const tick = () => {
+      if (!t.startTime) return;
+      const secs = Math.floor((Date.now() - t.startTime) / 1000);
+      if (elapsedEl) elapsedEl.textContent = _fmtElapsed(secs);
+    };
+    tick();
+    t.timerId = setInterval(tick, 500);
+  }
+
+  const statusEl = document.getElementById(t.prefix + 'status-' + agent);
+  const detailEl = document.getElementById(t.prefix + 'detail-' + agent);
+  const headerText = document.getElementById(t.prefix + 'progress-status-text');
+
+  if (step === 'done' || step === 'complete') {
+    stepEl.classList.remove('active');
+    stepEl.classList.add('done');
+    if (statusEl) statusEl.innerHTML = CHECK_SVG;
+  } else {
+    stepEl.classList.remove('done');
+    stepEl.classList.add('active');
+    if (statusEl) statusEl.innerHTML = SPINNER_SVG;
+    if (headerText && !panel.classList.contains('all-done')) {
+      headerText.textContent = AGENT_LABELS[agent] || 'Processing…';
+    }
+  }
+
+  if (detailEl && detail) detailEl.textContent = detail;
+  _recomputeProgress(trackerId);
+}
+
+function trackerComplete(trackerId) {
+  const t = TRACKERS[trackerId];
+  if (!t) return;
+  _visibleAgents(t).forEach(agent => {
+    const step = document.getElementById(t.prefix + 'step-' + agent);
+    if (step && !step.classList.contains('done')) {
+      step.classList.remove('active');
+      step.classList.add('done');
+      const statusEl = document.getElementById(t.prefix + 'status-' + agent);
+      if (statusEl) statusEl.innerHTML = CHECK_SVG;
+    }
+  });
+  _recomputeProgress(trackerId);
+}
+
+// Back-compat wrappers used by the new-game flow
+function resetProgress() {
+  trackerReset('agent-progress');
+}
+
+function updateAgent(agent, step, detail) {
+  trackerSetAgent('agent-progress', agent, step, detail);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SUBMIT GAME (SSE streaming) — preserved, PLUS recap + insights
+// ══════════════════════════════════════════════════════════════════════
+async function submitGame() {
+  const statusEl = document.getElementById('game-status');
+  const reportEl = document.getElementById('game-report');
+  const submitBtn = document.getElementById('submit-btn');
+
+  const myTeam = document.getElementById('my-team').value.trim();
+  const opponent = document.getElementById('game-opponent').value.trim();
+  const date = document.getElementById('game-date').value;
+  const ourScore = document.getElementById('game-our-score').value;
+  const oppScore = document.getElementById('game-opp-score').value;
+  const location = document.getElementById('game-location').value.trim();
+  const gameType = document.getElementById('game-type').value;
+
+  const recap = document.getElementById('game-recap').value.trim();
+  const notesOpponent = document.getElementById('notes-opponent').value.trim();
+  const notesPlayers = document.getElementById('notes-players').value.trim();
+  const notesWorked = document.getElementById('notes-worked').value.trim();
+  const notesDidnt = document.getElementById('notes-didnt').value.trim();
+  const notesExtra = document.getElementById('notes-extra').value.trim();
+
+  // Build metadata string
+  let metadata = '';
+  if (myTeam) metadata += `Our team is: ${myTeam}. `;
+  if (opponent) metadata += `Opponent: ${opponent}. `;
+  if (date) metadata += `Date: ${date}. `;
+  if (ourScore && oppScore) {
+    const result = parseInt(ourScore) > parseInt(oppScore) ? 'W' : parseInt(ourScore) < parseInt(oppScore) ? 'L' : 'T';
+    metadata += `Score: ${ourScore}-${oppScore} (${result}). `;
+  }
+  if (location) metadata += `Location: ${location}. `;
+  if (gameType) metadata += `Game type: ${gameType}. `;
+
+  // Build combined notes (with recap folded in)
+  let notes = '';
+  if (recap) notes += `Game recap (from GameChanger):\n${recap}\n\n`;
+  if (notesOpponent) notes += `What they ran:\n${notesOpponent}\n\n`;
+  if (notesPlayers) notes += `Opponent player tendencies:\n${notesPlayers}\n\n`;
+  if (notesWorked) notes += `What worked:\n${notesWorked}\n\n`;
+  if (notesDidnt) notes += `What didn't work:\n${notesDidnt}\n\n`;
+  if (notesExtra) notes += `Additional notes:\n${notesExtra}\n\n`;
+
+  const file = fileInput.files[0];
+
+  if (!notes.trim() && !metadata.trim() && !file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Enter game details, upload a file, or add notes.';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  resetProgress();
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span>Agents working...';
+  reportEl.classList.remove('visible');
+
+  const formData = new FormData();
+  formData.append('notes', notes);
+  formData.append('metadata', metadata);
+  if (file) formData.append('file', file);
+
+  // Attach the 4 insight screenshots (backend can pick these up when ready)
+  INSIGHT_IDS.forEach(id => {
+    const input = document.getElementById('insight-' + id);
+    if (input.files.length > 0) {
+      // Form field name uses underscore: insight_sting_h1, insight_sting_h2, insight_opp_h1, insight_opp_h2
+      formData.append('insight_' + id.replace('-', '_'), input.files[0]);
+    }
+  });
+
+  try {
+    const resp = await fetch('/api/game/stream', { method: 'POST', body: formData });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const json_str = line.slice(6);
+        if (!json_str) continue;
+
+        try {
+          const data = JSON.parse(json_str);
+
+          if (data.agent) updateAgent(data.agent, data.step, data.detail);
+
+          if (data.result) {
+            trackerComplete('agent-progress');
+            statusEl.className = 'status success';
+            statusEl.textContent = `Game processed: ${data.result.opponent} (${data.result.date}) — ${data.result.result}`;
+
+            const gameId = String(data.result.game_id || '').replace(/'/g, "\\'");
+            const opp    = String(data.result.opponent || '').replace(/'/g, "\\'");
+            const dte    = String(data.result.date || '').replace(/'/g, "\\'");
+
+            const postGame = `
+              <div class="bg-surface2 border border-border rounded-xl p-4 mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="w-6 h-6 rounded-full bg-orange/15 text-orange flex items-center justify-center text-xs font-black">→</span>
+                  <h3 class="text-sm font-black text-orange uppercase tracking-wider">Post-Game Follow-Up</h3>
+                </div>
+                <p class="text-xs text-text2 mb-3">Add this info to strengthen future scouting reports:</p>
+                <div class="space-y-2">
+                  <div>
+                    <label for="postgame-gc-link" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">GameChanger Recap Link</label>
+                    <input type="text" id="postgame-gc-link" placeholder="web.gc.com/teams/VGbwJULEMkSE/schedule/.../recap">
+                  </div>
+                  <div>
+                    <label for="postgame-tendencies" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Opponent Player Tendencies</label>
+                    <textarea id="postgame-tendencies" placeholder="#10 couldn't handle pressure&#10;#7 dominated boards" class="!min-h-[70px]"></textarea>
+                  </div>
+                  <div>
+                    <label for="postgame-adjustments" class="block text-[11px] font-bold text-text2 uppercase tracking-wider mb-1.5">Adjustments for Next Time</label>
+                    <textarea id="postgame-adjustments" placeholder="Start in press from Q1&#10;Force #7 left" class="!min-h-[70px]"></textarea>
+                  </div>
+                  <button onclick="savePostgameNotes('${gameId}', '${opp}', '${dte}')"
+                          class="px-4 py-2 rounded-lg bg-surface border border-border text-sm font-semibold hover:border-sting hover:text-sting transition-colors">
+                    Save Follow-Up Notes
+                  </button>
+                  <div id="postgame-save-status" class="text-xs text-text2"></div>
+                </div>
+              </div>`;
+
+            reportEl.innerHTML = postGame + copyButtonHtml(data.result.report_text) + markdownToHtml(data.result.report_text);
+            reportEl.classList.add('visible');
+
+            // Clear form
+            document.getElementById('game-opponent').value = '';
+            document.getElementById('game-our-score').value = '';
+            document.getElementById('game-opp-score').value = '';
+            document.getElementById('game-location').value = '';
+            document.getElementById('game-recap').value = '';
+            document.getElementById('notes-opponent').value = '';
+            document.getElementById('notes-players').value = '';
+            document.getElementById('notes-worked').value = '';
+            document.getElementById('notes-didnt').value = '';
+            document.getElementById('notes-extra').value = '';
+            fileInput.value = '';
+            fileName.textContent = '';
+            clearInsights();
+            document.getElementById('score-indicator').classList.add('hidden');
+          }
+
+          if (data.error) {
+            statusEl.className = 'status error';
+            statusEl.textContent = 'Error: ' + data.error;
+          }
+        } catch (e) { /* skip parse errors */ }
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Network error: ' + err.message;
+  }
+
+  submitBtn.disabled = false;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// GAMES LIST
+// ══════════════════════════════════════════════════════════════════════
+async function loadGames() {
+  const container = document.getElementById('games-list');
+  container.innerHTML = '<div class="text-center py-12 text-text2 text-sm">Loading...</div>';
+
+  try {
+    const resp = await fetch('/api/games');
+    const games = await resp.json();
+
+    if (games.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-16 px-6 text-text2">
+          <div class="text-5xl mb-3 opacity-50">🏀</div>
+          <p class="text-sm">No games yet.</p>
+          <p class="text-xs mt-1">Process your first game to get started.</p>
+          <button onclick="showPage('new-game')" class="mt-4 px-4 py-2 rounded-lg bg-sting text-white text-sm font-semibold">+ New Game</button>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = games.map(g => {
+      const score = `${g.our_score ?? '?'}-${g.opp_score ?? '?'}`;
+      const isWin = g.result === 'W';
+      const isLoss = g.result === 'L';
+      const badgeClass = isWin
+        ? 'bg-win/15 text-win border border-win/30'
+        : isLoss
+        ? 'bg-loss/10 text-loss border border-loss/20'
+        : 'bg-surface2 text-text2 border border-border';
+      const resultLetter = g.result || '·';
+
+      return `
+        <div onclick="viewGame('${g.id}')"
+             class="group bg-surface border border-border rounded-xl p-3.5 flex items-center gap-3 cursor-pointer hover:border-sting/50 transition-colors">
+          <div class="w-10 h-10 rounded-lg bg-surface2 flex items-center justify-center text-text2 font-black text-sm group-hover:text-sting transition-colors shrink-0">
+            ${escapeHtml(g.opponent).charAt(0).toUpperCase()}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-[15px] truncate">vs ${escapeHtml(g.opponent)}</div>
+            <div class="text-xs text-text2 truncate">${escapeHtml(g.date)}${g.location ? ' · ' + escapeHtml(g.location) : ''}</div>
+          </div>
+          <div class="shrink-0 text-right">
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-black ${badgeClass}">
+              <span>${resultLetter}</span>
+              <span class="tabular-nums">${score}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="text-center py-12 text-loss text-sm">Error loading games: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function viewGame(gameId) {
+  try {
+    const resp = await fetch(`/api/game/${gameId}`);
+    const data = await resp.json();
+
+    const reports = await fetch(`/api/reports?game_id=${gameId}`).then(r => r.json()).catch(() => []);
+    const report = reports.find(r => r.game_id === gameId);
+
+    let html = `<h2>vs ${escapeHtml(data.game.opponent)} — ${escapeHtml(data.game.date)}</h2>`;
+    html += `<p>Score: ${data.game.our_score || '?'}-${data.game.opp_score || '?'} (${data.game.result || '?'})</p>`;
+
+    if (data.observations && data.observations.length > 0) {
+      html += '<h3>Observations</h3><ul>';
+      data.observations.forEach(o => {
+        const q = o.quarter ? `[${o.quarter}] ` : '';
+        html += `<li><strong>${escapeHtml(o.category)}:</strong> ${escapeHtml(q + (o.detail || ''))}</li>`;
+      });
+      html += '</ul>';
+    }
+
+    if (report && report.report_text) {
+      html += '<hr>';
+      html += copyButtonHtml(report.report_text) + markdownToHtml(report.report_text);
+    }
+
+    const viewer = document.getElementById('report-viewer') || document.createElement('div');
+    viewer.id = 'report-viewer';
+    viewer.innerHTML = html;
+    viewer.className = 'report-display visible';
+    document.getElementById('page-games').appendChild(viewer);
+    viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    alert('Error loading game: ' + err.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// REPORTS LIST
+// ══════════════════════════════════════════════════════════════════════
+async function loadReports() {
+  const container = document.getElementById('reports-list');
+  container.innerHTML = '<div class="text-center py-12 text-text2 text-sm">Loading...</div>';
+
+  try {
+    const filterEl = document.getElementById('report-type-filter');
+    const typeFilter = filterEl ? filterEl.value : '';
+    const url = typeFilter ? `/api/reports?report_type=${typeFilter}` : '/api/reports';
+    const resp = await fetch(url);
+    const reports = await resp.json();
+
+    if (reports.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-16 px-6 text-text2">
+          <div class="text-5xl mb-3 opacity-50">📋</div>
+          <p class="text-sm">No reports yet.</p>
+        </div>`;
+      return;
+    }
+
+    window._reportCache = {};
+    reports.forEach(r => { window._reportCache[r.id] = r.report_text || ''; });
+
+    const typeLabels = {
+      'postgame': 'POSTGAME',
+      'scouting': 'SCOUTING',
+      'pregame': 'PRE-GAME',
+      'research': 'RESEARCH',
+      'league_standings': 'LEAGUE',
+      'team_identity': 'TEAM ID',
+    };
+    const typeClasses = {
+      'postgame':         'bg-sting/15 text-sting border-sting/30',
+      'scouting':         'bg-orange/15 text-orange border-orange/30',
+      'pregame':          'bg-emerald/15 text-emerald border-emerald/30',
+      'research':         'bg-cyan/15 text-cyan border-cyan/30',
+      'league_standings': 'bg-violet/15 text-violet border-violet/30',
+      'team_identity':    'bg-sky/15 text-sky border-sky/30',
+    };
+
+    container.innerHTML = reports.map(r => `
+      <div onclick="viewReportById('${r.id}')"
+           class="bg-surface border border-border rounded-xl p-3.5 cursor-pointer hover:border-sting/50 transition-colors">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="inline-block text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${typeClasses[r.report_type] || 'bg-surface2 text-text2 border-border'}">
+            ${typeLabels[r.report_type] || r.report_type}
+          </span>
+        </div>
+        <div class="font-bold text-[15px] truncate">${escapeHtml(r.opponent || 'Unknown')}</div>
+        <div class="text-xs text-text2 mt-0.5">${escapeHtml(r.created_at || '')}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="text-center py-12 text-loss text-sm">Error: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function viewReportById(id) {
+  const viewer = document.getElementById('report-viewer');
+  const text = (window._reportCache && window._reportCache[id]) || '';
+  viewer.innerHTML = copyButtonHtml(text) + markdownToHtml(text);
+  viewer.classList.add('visible');
+  viewer.scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyButtonHtml(rawText) {
+  const escaped = (rawText || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, "\\n");
+  return `<div class="flex gap-2 mb-3 sticky top-16 z-10 bg-surface/90 backdrop-blur -mx-5 md:-mx-5 px-5 py-2 -mt-5 border-b border-border">
+    <button onclick="copyReport('${escaped}')"
+            class="px-3 py-1.5 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+      ⎘ Copy Report
+    </button>
+    <button onclick="window.print()"
+            class="px-3 py-1.5 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting transition-colors">
+      ⎙ Print
+    </button>
+  </div>`;
+}
+
+function copyReport(text) {
+  const decoded = text.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+  navigator.clipboard.writeText(decoded).then(() => {
+    event.target.textContent = '✓ Copied!';
+    setTimeout(() => { event.target.textContent = '⎘ Copy Report'; }, 2000);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SCOUT — load opponents, direct actions
+// ══════════════════════════════════════════════════════════════════════
+async function loadOpponents() {
+  const container = document.getElementById('opponents-list');
+  try {
+    const resp = await fetch('/api/opponents');
+    const opponents = await resp.json();
+
+    if (opponents.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-text2 text-sm">No opponents yet. Process games first.</div>';
+      return;
+    }
+
+    container.innerHTML = opponents.map(o => {
+      const safeO = escapeHtml(o);
+      const jsO = String(o).replace(/'/g, "\\'");
+      return `
+        <div class="bg-surface border border-border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
+          <div class="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer" onclick="selectOpponent('${jsO}')">
+            <div class="w-8 h-8 rounded-lg bg-sting/15 text-sting flex items-center justify-center font-black text-sm shrink-0">${safeO.charAt(0).toUpperCase()}</div>
+            <div class="font-bold text-[14px] truncate">${safeO}</div>
+          </div>
+          <div class="grid grid-cols-3 sm:flex gap-1.5 shrink-0">
+            <button class="px-3 py-2 rounded-lg bg-orange/15 text-orange hover:bg-orange/25 border border-orange/20 hover:border-orange/30 font-semibold text-xs min-h-[38px] whitespace-nowrap transition-colors" onclick="scoutDirect('${jsO}')">Scout</button>
+            <button class="px-3 py-2 rounded-lg bg-emerald/15 text-emerald hover:bg-emerald/25 border border-emerald/20 hover:border-emerald/30 font-semibold text-xs min-h-[38px] whitespace-nowrap transition-colors" onclick="pregameDirect('${jsO}')">Pre-Game</button>
+            <button class="px-3 py-2 rounded-lg bg-cyan/15 text-cyan hover:bg-cyan/25 border border-cyan/20 hover:border-cyan/30 font-semibold text-xs min-h-[38px] whitespace-nowrap transition-colors" onclick="researchDirect('${jsO}')">Research</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = '';
+  }
+}
+
+function selectOpponent(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  document.getElementById('add-player-opponent').value = opponent;
+  loadOpponentPlayers(opponent);
+}
+
+function scoutDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  loadOpponentPlayers(opponent);
+  scoutOpponent();
+}
+
+function pregameDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  generatePregame(opponent);
+}
+
+function researchDirect(opponent) {
+  document.getElementById('scout-opponent').value = opponent;
+  researchOpponent();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SCOUT — pregame flow (SSE)
+// ══════════════════════════════════════════════════════════════════════
+async function generatePregame(opponent) {
+  if (!opponent) opponent = document.getElementById('scout-opponent').value.trim();
+  if (!opponent) return;
+
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Pre-game flow: hide researcher; show orchestrator → analyst → report_writer
+  trackerReset('scout-agent-progress', ['orchestrator', 'analyst', 'report_writer']);
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span>Generating pre-game brief for ${escapeHtml(opponent)}...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/pregame/${encodeURIComponent(opponent)}/stream`, { method: 'POST' });
+    await consumeScoutStream(resp, statusEl, reportEl, progressEl, (r) => `Pre-game brief ready: ${r.games_analyzed} game(s) analyzed.`);
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function scoutOpponent() {
+  const opponent = document.getElementById('scout-opponent').value.trim();
+  if (!opponent) return;
+
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Scout flow: hide researcher; show orchestrator → analyst → report_writer
+  trackerReset('scout-agent-progress', ['orchestrator', 'analyst', 'report_writer']);
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span>Scouting ${escapeHtml(opponent)}...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/scout/${encodeURIComponent(opponent)}/stream`, { method: 'POST' });
+    await consumeScoutStream(resp, statusEl, reportEl, progressEl, (r) => `Scouting report ready: ${r.games_analyzed} game(s) analyzed.`);
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function researchOpponent() {
+  const opponent = document.getElementById('scout-opponent').value.trim();
+  if (!opponent) return;
+
+  const league = document.getElementById('scout-league').value.trim();
+  const statusEl = document.getElementById('scout-status');
+  const reportEl = document.getElementById('scout-report');
+  const progressEl = document.getElementById('scout-agent-progress');
+
+  // Research flow: hide analyst; show orchestrator → researcher → report_writer
+  trackerReset('scout-agent-progress', ['orchestrator', 'researcher', 'report_writer']);
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = `<span class="spinner"></span>Researching ${escapeHtml(opponent)} online...`;
+  reportEl.classList.remove('visible');
+
+  try {
+    const url = `/api/research/${encodeURIComponent(opponent)}/stream${league ? '?league_info=' + encodeURIComponent(league) : ''}`;
+    const resp = await fetch(url, { method: 'POST' });
+    await consumeScoutStream(resp, statusEl, reportEl, progressEl, () => `Research complete for ${opponent}`);
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// Shared SSE consumer for scout streams — dedupes three near-identical handlers
+async function consumeScoutStream(resp, statusEl, reportEl, progressEl, successMessage) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+
+        if (data.agent) {
+          progressEl.classList.remove('hidden');
+          trackerSetAgent('scout-agent-progress', data.agent, data.step, data.detail);
+        }
+
+        if (data.result) {
+          // Force all visible agents to 'done' state in case the stream
+          // didn't emit a final 'done' for every one.
+          trackerComplete('scout-agent-progress');
+          statusEl.className = 'status success';
+          statusEl.textContent = successMessage(data.result);
+          reportEl.innerHTML = copyButtonHtml(data.result.report_text) + markdownToHtml(data.result.report_text);
+          reportEl.classList.add('visible');
+        }
+
+        if (data.error) {
+          statusEl.className = 'status error';
+          statusEl.textContent = data.error;
+        }
+      } catch (e) { }
+    }
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// LEAGUE
+// ══════════════════════════════════════════════════════════════════════
+const leagueFileInput = document.getElementById('league-file-input');
+const leagueFileName  = document.getElementById('league-file-name');
+const leagueUploadZone = document.getElementById('league-upload-zone');
+
+leagueFileInput.addEventListener('change', () => {
+  if (leagueFileInput.files.length > 0) {
+    leagueFileName.textContent = '✓ ' + leagueFileInput.files[0].name;
+  }
+});
+leagueUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); leagueUploadZone.classList.add('dragover'); });
+leagueUploadZone.addEventListener('dragleave', () => leagueUploadZone.classList.remove('dragover'));
+leagueUploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  leagueUploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    leagueFileInput.files = e.dataTransfer.files;
+    leagueFileName.textContent = '✓ ' + e.dataTransfer.files[0].name;
+  }
+});
+
+async function importLeague() {
+  const text = document.getElementById('league-text').value.trim();
+  const file = leagueFileInput.files[0];
+  const statusEl = document.getElementById('league-status');
+  const reportEl = document.getElementById('league-report');
+  const myTeam = localStorage.getItem('coachgpt_team') || '';
+
+  if (!text && !file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Paste standings or upload a file first.';
+    return;
+  }
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span>Parsing league data...';
+  reportEl.classList.remove('visible');
+
+  const leagueSeasonName = document.getElementById('league-season-name').value.trim();
+
+  const formData = new FormData();
+  formData.append('standings_text', text);
+  formData.append('team_name', myTeam);
+  formData.append('season_name', leagueSeasonName);
+  if (file) formData.append('file', file);
+
+  try {
+    const resp = await fetch('/api/league/import', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+      return;
+    }
+
+    statusEl.className = 'status success';
+    statusEl.textContent = `Parsed ${data.teams_count} teams. ${data.our_team ? 'You are #' + data.our_team.rank : ''}`;
+
+    await loadLeagues();
+
+    reportEl.innerHTML = renderLeagueHtml(data);
+    reportEl.classList.add('visible');
+
+    document.getElementById('league-text').value = '';
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+// Shared renderer for league standings markup
+function renderLeagueHtml(data, includeExpandable) {
+  let html = `<h2>${escapeHtml(data.league_name || 'League Standings')}</h2>`;
+  if (data.division) html += `<p style="color:#898993;">${escapeHtml(data.division)}</p>`;
+
+  const teams = data.teams || [];
+  const hasGames = includeExpandable && teams.some(t => t.game_results && t.game_results.length > 0);
+
+  html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>PPG</th><th>Opp</th><th>+/-</th>';
+  if (hasGames) html += '<th></th>';
+  html += '</tr></thead><tbody>';
+
+  teams.forEach((t, idx) => {
+    const isUs = t.is_us ? 'style="background:rgba(220,38,38,0.12);"' : '';
+    const marker = t.is_us ? ' <span style="color:#ef4444;">★</span>' : '';
+    const expandBtn = hasGames ? `<td><button onclick="toggleTeamGames(${idx})" style="background:#1a1a1f;border:1px solid #27272a;color:#898993;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;">Games</button></td>` : '';
+
+    html += `<tr ${isUs}><td>${t.rank}</td><td><strong>${escapeHtml(t.team)}${marker}</strong></td><td>${t.record}</td><td>${t.ppg}</td><td>${t.papg}</td><td style="color:${t.avg_margin >= 0 ? '#34d399' : '#fb7185'};font-weight:700;">${t.avg_margin > 0 ? '+' : ''}${t.avg_margin}</td>${expandBtn}</tr>`;
+
+    if (hasGames && t.game_results && t.game_results.length > 0) {
+      html += `<tr id="team-games-${idx}" style="display:none;"><td colspan="${hasGames ? 7 : 6}" style="padding:0;">`;
+      html += `<div style="background:#1a1a1f;padding:12px 16px;margin:4px 0;">`;
+      html += `<strong style="font-size:13px;color:#898993;">${escapeHtml(t.team)} — Game by Game</strong>`;
+      html += `<table style="margin-top:8px;font-size:13px;"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Margin</th></tr></thead><tbody>`;
+
+      t.game_results.forEach(g => {
+        const isVisitor = g.visitor === t.team;
+        const opp = isVisitor ? g.home : g.visitor;
+        const ourScore = isVisitor ? g.visitor_score : g.home_score;
+        const oppScore = isVisitor ? g.home_score : g.visitor_score;
+        const won = ourScore > oppScore;
+        const margin = ourScore - oppScore;
+        const color = won ? '#34d399' : '#fb7185';
+
+        html += `<tr>`;
+        html += `<td style="white-space:nowrap;">${escapeHtml(g.date || '')}</td>`;
+        html += `<td>${escapeHtml(opp)}</td>`;
+        html += `<td style="color:${color};font-weight:700;">${won ? 'W' : 'L'}</td>`;
+        html += `<td>${ourScore}-${oppScore}</td>`;
+        html += `<td style="color:${color};">${margin > 0 ? '+' : ''}${margin}</td>`;
+        html += `</tr>`;
+      });
+      html += '</tbody></table></div></td></tr>';
+    }
+  });
+  html += '</tbody></table></div>';
+
+  if (data.comparisons && data.comparisons.length > 0) {
+    html += '<h2 style="margin-top:20px;">Matchup Projections</h2>';
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table><thead><tr><th>Opponent</th><th>Record</th><th>Their +/-</th><th>Gap</th><th>Assessment</th></tr></thead><tbody>';
+    data.comparisons.forEach(c => {
+      const color = c.assessment === 'Strong favorite' ? '#34d399' :
+                    c.assessment === 'Favored' ? '#dc2626' :
+                    c.assessment === 'Toss-up' ? '#fb923c' :
+                    '#fb7185';
+      html += `<tr><td>${escapeHtml(c.opponent)}</td><td>${c.their_record}</td><td>${c.their_avg_margin > 0 ? '+' : ''}${c.their_avg_margin}</td><td>${c.our_margin_vs_theirs > 0 ? '+' : ''}${c.our_margin_vs_theirs}</td><td style="color:${color};font-weight:700;">${escapeHtml(c.assessment)}</td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+  return html;
+}
+
+async function loadLeagues() {
+  try {
+    const resp = await fetch('/api/leagues');
+    const leagues = await resp.json();
+    const select = document.getElementById('league-select');
+
+    select.innerHTML = '<option value="">— Select League —</option>';
+    leagues.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = `${l.name} (${l.teams_count} teams)`;
+      select.appendChild(opt);
+    });
+
+    if (leagues.length > 0) {
+      select.value = leagues[0].id;
+      displayLeague(leagues[0].id);
+    }
+  } catch (err) { }
+}
+
+async function displayLeague(leagueId) {
+  if (!leagueId) {
+    document.getElementById('league-report').classList.remove('visible');
+    return;
+  }
+  const reportEl = document.getElementById('league-report');
+
+  try {
+    const resp = await fetch(`/api/league/${leagueId}`);
+    const data = await resp.json();
+
+    if (data.error || data.report_text) {
+      reportEl.innerHTML = markdownToHtml(data.report_text || 'No data');
+      reportEl.classList.add('visible');
+      return;
+    }
+    reportEl.innerHTML = renderLeagueHtml(data, true);
+    reportEl.classList.add('visible');
+  } catch (err) {
+    reportEl.innerHTML = `<p>Error loading league: ${escapeHtml(err.message)}</p>`;
+    reportEl.classList.add('visible');
+  }
+}
+
+function toggleTeamGames(idx) {
+  const row = document.getElementById('team-games-' + idx);
+  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// TEAM / SEASON
+// ══════════════════════════════════════════════════════════════════════
+const seasonFileInput = document.getElementById('season-file-input');
+const seasonFileName  = document.getElementById('season-file-name');
+const seasonUploadZone = document.getElementById('season-upload-zone');
+
+seasonFileInput.addEventListener('change', () => {
+  if (seasonFileInput.files.length > 0) seasonFileName.textContent = '✓ ' + seasonFileInput.files[0].name;
+});
+seasonUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); seasonUploadZone.classList.add('dragover'); });
+seasonUploadZone.addEventListener('dragleave', () => seasonUploadZone.classList.remove('dragover'));
+seasonUploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  seasonUploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    seasonFileInput.files = e.dataTransfer.files;
+    seasonFileName.textContent = '✓ ' + e.dataTransfer.files[0].name;
+  }
+});
+
+document.getElementById('season-team').value = localStorage.getItem('coachgpt_team') || '';
+
+async function importSeason() {
+  const statusEl = document.getElementById('import-status');
+  const file = seasonFileInput.files[0];
+  const seasonName = document.getElementById('season-name').value.trim();
+  const teamName = document.getElementById('season-team').value.trim();
+
+  if (!file) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Please upload a CSV file.';
+    return;
+  }
+
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span>Importing season stats...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('season_name', seasonName || 'Imported Season');
+  formData.append('team_name', teamName || 'My Team');
+
+  try {
+    const resp = await fetch('/api/season/import', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+      return;
+    }
+    statusEl.className = 'status success';
+    statusEl.textContent = `Imported: ${data.players_imported} players, ${data.games_played} games (${data.season_name})`;
+
+    await loadSeasons();
+    document.getElementById('season-select').value = data.season_id;
+    displaySeason(data.season_id);
+
+    seasonFileInput.value = '';
+    seasonFileName.textContent = '';
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function loadSeasons() {
+  try {
+    const resp = await fetch('/api/seasons');
+    const seasons = await resp.json();
+    const select = document.getElementById('season-select');
+    select.innerHTML = '<option value="">— Select Season —</option>';
+    seasons.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.name} — ${s.team_name} (${s.games_played} games)`;
+      select.appendChild(opt);
+    });
+    if (seasons.length > 0) {
+      select.value = seasons[0].id;
+      displaySeason(seasons[0].id);
+    }
+  } catch (err) {}
+}
+
+async function displaySeason(seasonId) {
+  try {
+    const resp = await fetch(`/api/season/${seasonId}`);
+    const data = await resp.json();
+    if (data.error) return;
+
+    const container = document.getElementById('season-data');
+    container.style.display = 'block';
+
+    const season = data.season;
+    const totals = data.team_totals;
+    const roster = data.roster;
+
+    document.getElementById('team-summary-title').textContent = `${season.team_name} — ${season.name}`;
+
+    // Team summary — stat tiles (responsive grid, never crushes on narrow)
+    let summaryHtml = '';
+    if (totals) {
+      const tile = (val, label, color) => `
+        <div class="bg-surface2 border border-border rounded-lg px-2 py-3 text-center">
+          <div class="text-xl sm:text-2xl font-black tabular-nums leading-tight" style="color:${color || '#f0f0f3'};">${val}</div>
+          <div class="text-[10px] text-text2 uppercase tracking-wider mt-0.5">${label}</div>
+        </div>`;
+      summaryHtml = `
+        <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
+          ${tile(totals.games_played, 'Games', '#ef4444')}
+          ${tile(totals.ppg, 'PPG', '#34d399')}
+          ${tile(Math.round(totals.fg_pct * 100) + '%', 'FG%')}
+          ${tile(Math.round(totals.three_pct * 100) + '%', '3PT%')}
+          ${tile(Math.round(totals.ft_pct * 100) + '%', 'FT%')}
+          ${tile((totals.turnovers / totals.games_played).toFixed(1), 'TO/G', '#fb7185')}
+          ${tile((totals.rebounds / totals.games_played).toFixed(1), 'REB/G')}
+          ${tile((totals.assists / totals.games_played).toFixed(1), 'AST/G')}
+          ${tile((totals.steals / totals.games_played).toFixed(1), 'STL/G', '#fb923c')}
+          ${tile((totals.blocks / totals.games_played).toFixed(1), 'BLK/G')}
+        </div>`;
+    }
+    document.getElementById('team-summary').innerHTML = summaryHtml;
+
+    // Roster cards
+    let rosterHtml = '';
+    roster.forEach((p) => {
+      const roleColors = {
+        'Scorer': '#34d399', 'Playmaker': '#ef4444',
+        'Disruptor': '#fb923c', 'Rebounder': '#a78bfa',
+        'Role Player': '#898993', 'Contributor': '#898993', 'Reserve': '#898993'
+      };
+
+      const roles = [];
+      if (p.ppg >= 8) roles.push('Scorer');
+      if (p.apg >= 3) roles.push('Playmaker');
+      if (p.spg >= 2) roles.push('Disruptor');
+      if (p.rpg >= 5) roles.push('Rebounder');
+      if (roles.length === 0 && p.games_played >= 15) roles.push(p.ppg < 3 ? 'Role Player' : 'Contributor');
+      if (p.games_played < 5) roles.push('Reserve');
+
+      const primaryRole = roles[0] || 'Player';
+      const primaryColor = roleColors[primaryRole] || '#898993';
+
+      const badges = roles.map(r =>
+        `<span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;padding:2px 7px;border-radius:4px;background:${roleColors[r] || '#898993'}26;color:${roleColors[r] || '#898993'};">${r}</span>`
+      ).join(' ');
+
+      const statBar = (label, value, max, color) => {
+        const pct = Math.min(100, (value / max) * 100);
+        return `<div style="margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+            <span style="color:#898993;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${label}</span>
+            <span style="font-weight:800;color:#f0f0f3;">${value}</span>
+          </div>
+          <div style="height:5px;background:#111114;border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+          </div>
+        </div>`;
+      };
+
+      rosterHtml += `
+        <div class="bg-surface border border-border rounded-xl overflow-hidden">
+          <div class="flex flex-col sm:flex-row">
+            <!-- Number badge -->
+            <div class="flex sm:flex-col items-center justify-center gap-3 sm:gap-1 px-4 py-3 sm:w-[72px] sm:py-4 border-b sm:border-b-0 sm:border-r border-border" style="background:${primaryColor}12;">
+              <div class="text-3xl sm:text-[28px] font-black leading-none tabular-nums" style="color:${primaryColor};">#${p.number}</div>
+              <div class="text-[10px] text-text2 font-semibold uppercase tracking-wider">${p.games_played} GP</div>
+            </div>
+            <!-- Content -->
+            <div class="flex-1 p-4">
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="min-w-0">
+                  <div class="text-[17px] font-black truncate">${escapeHtml(p.first_name + ' ' + p.last_name)}</div>
+                  <div class="mt-1.5 flex flex-wrap gap-1">${badges}</div>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="text-[26px] font-black leading-none tabular-nums" style="color:${primaryColor};">${p.ppg}</div>
+                  <div class="text-[10px] text-text2 uppercase tracking-wider">PPG</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+                ${statBar('Rebounds', p.rpg, 8, '#a78bfa')}
+                ${statBar('Assists',  p.apg, 5, '#ef4444')}
+                ${statBar('Steals',   p.spg, 5, '#fb923c')}
+                ${statBar('Turnovers',p.topg, 5, '#fb7185')}
+              </div>
+              <!-- Shooting splits -->
+              <div class="mt-3 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div class="text-lg font-black tabular-nums">${(p.fg_pct * 100).toFixed(0)}%</div>
+                  <div class="text-[10px] text-text2 uppercase tracking-wider font-semibold">FG</div>
+                  <div class="text-[10px] text-text2 tabular-nums">${p.fg_made}-${p.fg_attempted}</div>
+                </div>
+                <div class="border-x border-border">
+                  <div class="text-lg font-black tabular-nums" style="color:${(p.three_pct * 100) >= 30 ? '#34d399' : (p.three_pct * 100) >= 20 ? '#f0f0f3' : '#fb7185'};">${(p.three_pct * 100).toFixed(0)}%</div>
+                  <div class="text-[10px] text-text2 uppercase tracking-wider font-semibold">3PT</div>
+                  <div class="text-[10px] text-text2 tabular-nums">${p.three_made}-${p.three_attempted}</div>
+                </div>
+                <div>
+                  <div class="text-lg font-black tabular-nums" style="color:${(p.ft_pct * 100) >= 60 ? '#34d399' : (p.ft_pct * 100) >= 40 ? '#f0f0f3' : '#fb7185'};">${(p.ft_pct * 100).toFixed(0)}%</div>
+                  <div class="text-[10px] text-text2 uppercase tracking-wider font-semibold">FT</div>
+                  <div class="text-[10px] text-text2 tabular-nums">${p.ft_made}-${p.ft_attempted}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    });
+    document.getElementById('roster-list').innerHTML = rosterHtml;
+
+  } catch (err) {
+    console.error('Error loading season:', err);
+  }
+}
+
+async function generateTeamIdentity() {
+  const select = document.getElementById('season-select');
+  const seasonId = select.value;
+  if (!seasonId) { alert('Select a season first.'); return; }
+
+  const statusEl = document.getElementById('identity-status');
+  const reportEl = document.getElementById('identity-report');
+  const btn = document.getElementById('identity-btn');
+
+  btn.disabled = true;
+  statusEl.className = 'status loading';
+  statusEl.innerHTML = '<span class="spinner"></span>Generating team identity report...';
+  reportEl.classList.remove('visible');
+
+  try {
+    const resp = await fetch(`/api/season/${seasonId}/identity`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'Error: ' + data.error;
+    } else {
+      statusEl.className = 'status success';
+      statusEl.textContent = 'Team identity report generated.';
+      reportEl.innerHTML = copyButtonHtml(data.report_text) + markdownToHtml(data.report_text);
+      reportEl.classList.add('visible');
+    }
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+  btn.disabled = false;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// POST-GAME FOLLOW-UP  + OPPONENT PLAYER CRUD
+// ══════════════════════════════════════════════════════════════════════
+async function savePostgameNotes(gameId, opponent, date) {
+  const gcLink = document.getElementById('postgame-gc-link').value.trim();
+  const tendencies = document.getElementById('postgame-tendencies').value.trim();
+  const adjustments = document.getElementById('postgame-adjustments').value.trim();
+  const statusEl = document.getElementById('postgame-save-status');
+
+  if (!gcLink && !tendencies && !adjustments) {
+    statusEl.textContent = 'Nothing to save.';
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/game/followup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ game_id: gameId, opponent, date, gc_link: gcLink, tendencies, adjustments }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      statusEl.style.color = '#fb7185';
+      statusEl.textContent = 'Error: ' + data.error;
+    } else {
+      statusEl.style.color = '#34d399';
+      statusEl.textContent = `Saved: ${data.players_added || 0} player tendencies, ${data.observations_added || 0} observations`;
+      document.getElementById('postgame-gc-link').value = '';
+      document.getElementById('postgame-tendencies').value = '';
+      document.getElementById('postgame-adjustments').value = '';
+    }
+  } catch (err) {
+    statusEl.style.color = '#fb7185';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+function toggleAddPlayer() {
+  const form = document.getElementById('add-player-form');
+  form.style.display = (form.style.display === 'none' || form.style.display === '') ? 'block' : 'none';
+}
+
+async function saveNewPlayer() {
+  const opponent = document.getElementById('add-player-opponent').value.trim()
+    || document.getElementById('scout-opponent').value.trim();
+  if (!opponent) { alert('Enter an opponent team name.'); return; }
+
+  const number = document.getElementById('add-player-number').value.trim().replace('#', '');
+  const name = document.getElementById('add-player-name').value.trim();
+  const tendencies = document.getElementById('add-player-tendencies').value.trim();
+  const statusEl = document.getElementById('add-player-status');
+
+  if (!number) { statusEl.textContent = 'Enter a jersey number.'; return; }
+
+  const lines = tendencies.split('\n').filter(l => l.trim());
+
+  try {
+    for (const tendency of lines) {
+      await fetch('/api/game/followup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          game_id: null, opponent, date: new Date().toISOString().split('T')[0],
+          gc_link: '', tendencies: `#${number} ${tendency.trim()}`, adjustments: '',
+        }),
+      });
+    }
+    if (name || lines.length === 0) {
+      await fetch('/api/game/followup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          game_id: null, opponent, date: new Date().toISOString().split('T')[0],
+          gc_link: '', tendencies: `#${number} ${name || 'player'}`, adjustments: '',
+        }),
+      });
+    }
+
+    statusEl.style.color = '#34d399';
+    statusEl.textContent = `Saved #${number} for ${opponent}`;
+
+    document.getElementById('add-player-number').value = '';
+    document.getElementById('add-player-name').value = '';
+    document.getElementById('add-player-tendencies').value = '';
+
+    loadOpponentPlayers(opponent);
+  } catch (err) {
+    statusEl.style.color = '#fb7185';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function loadOpponentPlayers(opponent) {
+  const section = document.getElementById('opp-players-section');
+  const container = document.getElementById('opp-players-list');
+
+  if (!opponent) {
+    // Keep section visible so "Add Player" is available, but clear cards
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/opponent-players/${encodeURIComponent(opponent)}`);
+    const players = await resp.json();
+
+    if (!players || players.length === 0) {
+      container.innerHTML = `<p class="text-sm text-text2">No players scouted for ${escapeHtml(opponent)} yet.</p>`;
+      return;
+    }
+
+    window._oppPlayers = players;
+
+    container.innerHTML = players.map((p) => {
+      const jsOpp = String(opponent).replace(/'/g, "\\'");
+      const jsId  = String(p.id).replace(/'/g, "\\'");
+      const tendencyList = (p.tendencies || []).map((t, tIdx) =>
+        `<li class="flex items-center justify-between gap-2 py-1 text-sm text-text">
+           <span>${escapeHtml(t)}</span>
+           <button onclick="deleteTendency('${jsId}',${tIdx},'${jsOpp}')"
+                   class="w-6 h-6 rounded-full text-loss opacity-60 hover:opacity-100 hover:bg-loss/15 flex items-center justify-center transition-all shrink-0"
+                   title="Remove">×</button>
+         </li>`
+      ).join('');
+
+      return `
+        <div class="bg-surface border border-border rounded-xl overflow-hidden">
+          <div class="flex">
+            <div class="w-[58px] flex flex-col items-center justify-center py-3 px-1 border-r border-border" style="background:rgba(220,38,38,0.08);">
+              <div class="text-[22px] font-black leading-none tabular-nums text-sting">#${escapeHtml(String(p.number))}</div>
+              <div class="text-[9px] text-text2 font-semibold mt-1">${p.games_seen || 1} GP</div>
+            </div>
+            <div class="flex-1 p-3 min-w-0">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <div class="font-bold text-[14px] truncate">${escapeHtml(p.name || 'Unknown')}</div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="text-[10px] text-text2 truncate max-w-[100px]">${escapeHtml(p.opponent_team || '')}</span>
+                  <button onclick="deletePlayer('${jsId}','${jsOpp}')"
+                          class="text-[10px] px-2 py-1 rounded border border-border text-loss hover:border-loss transition-colors">Delete</button>
+                </div>
+              </div>
+              <ul class="list-none pl-0 space-y-0.5">
+                ${tendencyList || '<li class="text-text2 text-sm">No tendencies recorded yet</li>'}
+              </ul>
+              <div class="mt-2 flex gap-1.5">
+                <input type="text" id="new-tendency-${escapeHtml(String(p.id))}" placeholder="Add tendency..." class="!py-2 !px-3 !text-xs flex-1">
+                <button onclick="addTendency('${jsId}','${jsOpp}')"
+                        class="px-3 py-2 rounded-lg bg-surface2 border border-border text-xs font-semibold text-text hover:border-sting hover:text-sting whitespace-nowrap transition-colors">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<p class="text-sm text-loss">Error: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function deleteTendency(playerId, tendencyIdx, opponent) {
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'delete_tendency', index: tendencyIdx }),
+  });
+  loadOpponentPlayers(opponent);
+}
+
+async function addTendency(playerId, opponent) {
+  const input = document.getElementById('new-tendency-' + playerId);
+  const tendency = input.value.trim();
+  if (!tendency) return;
+
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'add_tendency', tendency }),
+  });
+  input.value = '';
+  loadOpponentPlayers(opponent);
+}
+
+async function deletePlayer(playerId, opponent) {
+  if (!confirm('Delete this player?')) return;
+  await fetch(`/api/opponent-player/${playerId}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ action: 'delete_player' }),
+  });
+  loadOpponentPlayers(opponent);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GUIDE
+// ══════════════════════════════════════════════════════════════════════
+async function loadGuide() {
+  try {
+    const resp = await fetch('/api/guide');
+    const data = await resp.json();
+    document.getElementById('guide-content').innerHTML = markdownToHtml(data.content || 'Guide not found.');
+  } catch (err) {
+    document.getElementById('guide-content').innerHTML = '<p>Error loading guide.</p>';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MARKDOWN → HTML  (preserved verbatim from original)
+// ══════════════════════════════════════════════════════════════════════
+function markdownToHtml(md) {
+  if (!md) return '';
+
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+  let inOl = false;
+  let inTable = false;
+  let tableHeaderDone = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Table detection
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      const nextLine = (lines[i + 1] || '').trim();
+      const isSeparator = /^\|[\s\-:]+\|/.test(nextLine) && nextLine.split('|').slice(1, -1).every(c => /^[\s\-:]+$/.test(c.trim()));
+
+      if (!inTable) {
+        if (inList) { html += '</ul>'; inList = false; }
+        if (inOl)   { html += '</ol>'; inOl = false; }
+        html += '<table>';
+        inTable = true;
+        tableHeaderDone = false;
+      }
+
+      if (isSeparator && !tableHeaderDone) {
+        html += '<thead><tr>' + cells.map(c => `<th>${applyInline(c)}</th>`).join('') + '</tr></thead><tbody>';
+        i++; // skip separator
+        tableHeaderDone = true;
+      } else {
+        html += '<tr>' + cells.map(c => `<td>${applyInline(c)}</td>`).join('') + '</tr>';
+      }
+      continue;
+    }
+
+    if (inTable) {
+      if (tableHeaderDone) html += '</tbody>';
+      html += '</table>';
+      inTable = false;
+      tableHeaderDone = false;
+    }
+
+    if (line.startsWith('### ')) { closeList(); html += `<h3>${applyInline(line.slice(4))}</h3>`; continue; }
+    if (line.startsWith('## '))  { closeList(); html += `<h2>${applyInline(line.slice(3))}</h2>`; continue; }
+    if (line.startsWith('# '))   { closeList(); html += `<h1>${applyInline(line.slice(2))}</h1>`; continue; }
+    if (/^---+$/.test(line.trim())) { closeList(); html += '<hr>'; continue; }
+    if (line.startsWith('> ')) { closeList(); html += `<blockquote>${applyInline(line.slice(2))}</blockquote>`; continue; }
+
+    if (/^[\-\*] /.test(line.trim())) {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${applyInline(line.trim().slice(2))}</li>`;
+      continue;
+    }
+
+    if (/^\d+\. /.test(line.trim())) {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (!inOl) { html += '<ol>'; inOl = true; }
+      html += `<li>${applyInline(line.trim().replace(/^\d+\. /, ''))}</li>`;
+      continue;
+    }
+
+    closeList();
+
+    if (line.trim() === '') { html += '<br>'; continue; }
+    html += `<p>${applyInline(line)}</p>`;
+  }
+
+  closeList();
+  if (inTable) {
+    if (tableHeaderDone) html += '</tbody>';
+    html += '</table>';
+  }
+
+  function closeList() {
+    if (inList) { html += '</ul>'; inList = false; }
+    if (inOl)   { html += '</ol>'; inOl = false; }
+  }
+  return html;
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function applyInline(text) {
+  return escapeHtml(text)
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+</script>
+
+</body>
+</html>

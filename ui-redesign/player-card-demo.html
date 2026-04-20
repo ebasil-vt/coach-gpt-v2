@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#09090b">
+<title>CoachGPT — Player Card (Design Preview)</title>
+
+<style>
+  html, body {
+    background: #09090b;
+    color: #f0f0f3;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+  }
+  body {
+    min-height: 100vh;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(239,68,68,0.08), transparent 70%);
+    background-attachment: fixed;
+  }
+</style>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg:        '#09090b',
+          surface:   '#111114',
+          surface2:  '#1a1a1f',
+          surface3:  '#222228',
+          border:    'rgba(255,255,255,0.06)',
+          text:      '#f0f0f3',
+          text2:     'rgba(240,240,243,0.55)',
+          text3:     'rgba(240,240,243,0.35)',
+          sting:     { DEFAULT: '#ef4444', 500: '#ef4444', 600: '#dc2626' },
+          win:       '#34d399',
+          loss:      '#fb7185',
+          rose:      '#fb7185',
+          emerald:   '#34d399',
+          orange:    '#fb923c',
+          violet:    '#a78bfa',
+          cyan:      '#22d3ee',
+          amber:     '#fbbf24',
+        },
+        boxShadow: {
+          'sting-glow':   '0 0 24px rgba(239,68,68,0.18)',
+          'inset-top':    'inset 0 1px 0 rgba(255,255,255,0.04)',
+        },
+        fontFamily: {
+          sans: ['Inter','-apple-system','system-ui','sans-serif'],
+        },
+      }
+    }
+  }
+</script>
+
+<style>
+  /* ───────────────────────────────────────────────
+     Player card — custom styles beyond Tailwind
+     ─────────────────────────────────────────────── */
+
+  /* Jersey number treatment — weighty, slightly compressed */
+  .jersey-num {
+    font-weight: 900;
+    letter-spacing: -0.06em;
+    line-height: 0.85;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Thin vertical stripe — athlete's "stripe" on the card edge */
+  .stripe {
+    position: absolute;
+    left: 0; top: 20px; bottom: 20px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: linear-gradient(180deg, #ef4444 0%, rgba(239,68,68,0.3) 100%);
+  }
+
+  /* Sparkline: track + two layered bars.
+     Season bar = full height muted; Recent bar = narrower stripe, brighter, layered on top. */
+  .spark-track {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    overflow: hidden;
+  }
+  .spark-season {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: currentColor;
+    opacity: 0.25;
+    border-radius: 999px;
+    transition: width 700ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .spark-recent {
+    position: absolute; left: 0; top: 2px;
+    height: 4px;
+    background: currentColor;
+    border-radius: 999px;
+    transition: width 700ms cubic-bezier(0.4, 0, 0.2, 1) 150ms;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  /* Ring chart — stroke-dash animation */
+  .ring-chart circle.fg {
+    transition: stroke-dasharray 900ms cubic-bezier(0.4, 0, 0.2, 1) 200ms;
+  }
+
+  /* Game tile — mini hover/active state */
+  .game-tile {
+    transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+  }
+  .game-tile:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.12); }
+  .game-tile.active {
+    background: rgba(239,68,68,0.08);
+    border-color: rgba(239,68,68,0.35);
+  }
+
+  /* Context tab */
+  .ctx-tab { transition: all 150ms ease; }
+  .ctx-tab.active {
+    background: rgba(239,68,68,0.12);
+    color: #ef4444;
+  }
+
+  /* Trend pulse — tiny breathing effect on UP trends */
+  @keyframes trend-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+  }
+  .trend-up-pulse {
+    animation: trend-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Entrance animation — staggered */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fade-up 500ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+  /* Tabular numbers wherever stats appear */
+  .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+</style>
+</head>
+
+<body class="min-h-screen">
+
+<div class="max-w-md mx-auto px-4 py-6 space-y-6">
+
+  <!-- Demo header -->
+  <header class="pt-2 pb-1">
+    <div class="flex items-center gap-2 mb-1">
+      <div class="w-6 h-6 rounded bg-sting flex items-center justify-center font-black text-white text-[11px] shadow-sting-glow">S</div>
+      <div class="text-[10px] font-semibold text-text3 uppercase tracking-[0.18em]">CoachGPT · Player Card</div>
+    </div>
+    <h1 class="text-xl font-bold text-text tracking-tight">My Roster</h1>
+    <p class="text-[13px] text-text2 mt-0.5">22 games · 2025–26 season</p>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════
+       CARD 1 — Marcus Chen (Scorer + Playmaker)
+       ═══════════════════════════════════════════════════ -->
+  <article class="fade-up relative bg-surface border border-border rounded-2xl overflow-hidden shadow-inset-top"
+           data-player="marcus" style="animation-delay: 100ms">
+
+    <!-- Thin top accent — gradient from primary role color -->
+    <div class="h-[2px] bg-gradient-to-r from-emerald via-sting/80 to-transparent"></div>
+
+    <!-- Header strip -->
+    <div class="relative pl-6 pr-5 pt-5 pb-4 flex items-start gap-4">
+      <div class="stripe"></div>
+
+      <!-- Jersey number -->
+      <div class="flex-shrink-0 pt-0.5">
+        <div class="flex items-start gap-0.5">
+          <span class="text-[18px] font-bold text-text3 leading-none mt-1">#</span>
+          <span class="jersey-num text-[56px] text-text">7</span>
+        </div>
+      </div>
+
+      <!-- Name + roles -->
+      <div class="flex-1 min-w-0 pt-1">
+        <h2 class="text-[17px] font-bold text-text truncate tracking-tight leading-snug">Marcus Chen</h2>
+        <p class="text-[11px] text-text3 mt-0.5 uppercase tracking-wider">Guard · 22 games</p>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald/15 text-emerald text-[10px] font-bold uppercase tracking-wider border border-emerald/25">
+            <span class="w-1 h-1 rounded-full bg-emerald"></span>Scorer
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sting/15 text-sting text-[10px] font-bold uppercase tracking-wider border border-sting/25">
+            <span class="w-1 h-1 rounded-full bg-sting"></span>Playmaker
+          </span>
+        </div>
+      </div>
+
+      <!-- Headliner stat (PPG) -->
+      <div class="flex-shrink-0 text-right">
+        <div class="tnum text-[38px] font-black text-text leading-none tracking-tight">14.3</div>
+        <div class="text-[9px] font-bold text-text3 uppercase tracking-[0.12em] mt-1">PPG · season</div>
+        <div class="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 rounded bg-emerald/10 text-emerald text-[10px] font-bold trend-up-pulse">
+          <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>
+          <span class="tnum">+2.3</span>
+          <span class="opacity-60 font-medium">L5</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="border-t border-border"></div>
+
+    <!-- Sparklines row -->
+    <div class="px-5 py-4 space-y-2.5">
+
+      <!-- PPG (trending up) -->
+      <div class="flex items-center gap-3 text-emerald">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">PPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 57%"></div>
+          <div class="spark-recent" style="width: 66%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">14.3</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>16.6
+          </div>
+        </div>
+      </div>
+
+      <!-- RPG (trending down slightly) -->
+      <div class="flex items-center gap-3 text-violet">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">RPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 35%"></div>
+          <div class="spark-recent" style="width: 32%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">4.2</div>
+          <div class="text-text/70 font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2 text-text3" fill="currentColor"><path d="M5 9L1 3h8z"/></svg>3.8
+          </div>
+        </div>
+      </div>
+
+      <!-- APG (trending up) -->
+      <div class="flex items-center gap-3 text-sting">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">APG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 39%"></div>
+          <div class="spark-recent" style="width: 56%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">3.1</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>4.5
+          </div>
+        </div>
+      </div>
+
+      <!-- SPG (trending up) -->
+      <div class="flex items-center gap-3 text-orange">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">SPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 36%"></div>
+          <div class="spark-recent" style="width: 44%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">1.8</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>2.2
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="border-t border-border"></div>
+
+    <!-- Shooting splits -->
+    <div class="px-5 py-4">
+      <div class="flex items-baseline justify-between mb-3">
+        <h3 class="text-[10px] font-bold text-text2 uppercase tracking-[0.12em]">Shooting</h3>
+        <span class="text-[10px] text-text3 tnum">last 5 vs season</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+
+        <!-- FG% -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#34d399" stroke-width="4"
+                      stroke-dasharray="78.37 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-emerald leading-none">48%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">95 / 197</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">FG</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-emerald font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>+4
+          </div>
+        </div>
+
+        <!-- 3PT% -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#34d399" stroke-width="4"
+                      stroke-dasharray="60.44 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-emerald leading-none">37%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">21 / 57</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">3PT</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-emerald font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>+8
+          </div>
+        </div>
+
+        <!-- FT% -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#34d399" stroke-width="4"
+                      stroke-dasharray="115.98 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-emerald leading-none">71%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">42 / 59</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">FT</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-text3 font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><rect x="1" y="4" width="8" height="2"/></svg>±0
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="border-t border-border"></div>
+
+    <!-- Game log mini-strip -->
+    <div class="px-5 py-4">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <h3 class="text-[10px] font-bold text-text2 uppercase tracking-[0.12em]">Last 5 games</h3>
+        <span class="text-[10px] text-text3">Tap to expand</span>
+      </div>
+      <div class="grid grid-cols-5 gap-1.5" id="marcus-games">
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Bengals" data-score="62-48 W" data-line="18 pts · 5 reb · 3 ast · 1 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">BEN</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">18</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Oak Hill" data-score="71-59 W" data-line="21 pts · 4 reb · 5 ast · 3 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">OAK</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">21</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Lincoln" data-score="44-51 L" data-line="12 pts · 3 reb · 2 ast · 1 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">LIN</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">12</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-loss mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Westfield" data-score="55-49 W" data-line="14 pts · 4 reb · 6 ast · 2 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">WES</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">14</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-text3 mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Northwest" data-score="68-52 W" data-line="18 pts · 3 reb · 6 ast · 4 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">NOR</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">18</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5"></div>
+        </button>
+      </div>
+
+      <!-- Expanded detail (populated on tap) -->
+      <div id="marcus-detail" class="hidden mt-3 p-3 rounded-lg bg-surface2 border border-border">
+        <div class="flex items-center justify-between mb-1">
+          <div class="text-[13px] font-bold text-text">vs <span class="detail-opp">—</span></div>
+          <div class="tnum text-[11px] font-bold text-text2 detail-score">—</div>
+        </div>
+        <div class="text-[12px] text-text2 detail-line">—</div>
+      </div>
+    </div>
+
+    <!-- Context tabs -->
+    <div class="border-t border-border px-5 py-2.5 bg-bg/40">
+      <div class="flex gap-1 overflow-x-auto no-scrollbar" role="tablist">
+        <button class="ctx-tab active px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text2">All · 22</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">League · 14</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">Tournament · 6</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">Scrimmage · 2</button>
+      </div>
+    </div>
+
+    <!-- Source footer -->
+    <div class="border-t border-border px-5 py-2 bg-bg/60 flex items-center gap-2">
+      <svg viewBox="0 0 16 16" class="w-3 h-3 text-text3 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="8" r="6.5"/>
+        <path d="M8 5v3l2 1.5"/>
+      </svg>
+      <p class="text-[10px] text-text3 leading-tight">
+        Combined source: <span class="text-text2 font-medium">22 game reports</span> + <span class="text-text2 font-medium">season CSV (35 games)</span>
+      </p>
+    </div>
+  </article>
+
+  <!-- ═══════════════════════════════════════════════════
+       CARD 2 — Jordan Reed (Rebounder + Disruptor)
+       Shows different headliner stat + role color + trends
+       ═══════════════════════════════════════════════════ -->
+  <article class="fade-up relative bg-surface border border-border rounded-2xl overflow-hidden shadow-inset-top"
+           data-player="jordan" style="animation-delay: 250ms">
+
+    <!-- Top accent — violet (primary role) -->
+    <div class="h-[2px] bg-gradient-to-r from-violet via-orange/80 to-transparent"></div>
+
+    <!-- Header strip -->
+    <div class="relative pl-6 pr-5 pt-5 pb-4 flex items-start gap-4">
+      <div class="stripe" style="background: linear-gradient(180deg,#a78bfa 0%,rgba(167,139,250,0.3) 100%);"></div>
+
+      <div class="flex-shrink-0 pt-0.5">
+        <div class="flex items-start gap-0.5">
+          <span class="text-[18px] font-bold text-text3 leading-none mt-1">#</span>
+          <span class="jersey-num text-[56px] text-text">23</span>
+        </div>
+      </div>
+
+      <div class="flex-1 min-w-0 pt-1">
+        <h2 class="text-[17px] font-bold text-text truncate tracking-tight leading-snug">Jordan Reed</h2>
+        <p class="text-[11px] text-text3 mt-0.5 uppercase tracking-wider">Forward · 22 games</p>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet/15 text-violet text-[10px] font-bold uppercase tracking-wider border border-violet/25">
+            <span class="w-1 h-1 rounded-full bg-violet"></span>Rebounder
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange/15 text-orange text-[10px] font-bold uppercase tracking-wider border border-orange/25">
+            <span class="w-1 h-1 rounded-full bg-orange"></span>Disruptor
+          </span>
+        </div>
+      </div>
+
+      <!-- Headliner: RPG (the defining stat for this player) -->
+      <div class="flex-shrink-0 text-right">
+        <div class="tnum text-[38px] font-black text-text leading-none tracking-tight">9.5</div>
+        <div class="text-[9px] font-bold text-text3 uppercase tracking-[0.12em] mt-1">RPG · season</div>
+        <div class="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 rounded bg-emerald/10 text-emerald text-[10px] font-bold trend-up-pulse">
+          <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>
+          <span class="tnum">+1.7</span>
+          <span class="opacity-60 font-medium">L5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-border"></div>
+
+    <!-- Sparklines -->
+    <div class="px-5 py-4 space-y-2.5">
+      <!-- PPG (trending down) -->
+      <div class="flex items-center gap-3 text-emerald">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">PPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 33%"></div>
+          <div class="spark-recent" style="width: 27%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">8.2</div>
+          <div class="text-loss font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 9L1 3h8z"/></svg>6.8
+          </div>
+        </div>
+      </div>
+
+      <!-- RPG (trending up — the hero stat) -->
+      <div class="flex items-center gap-3 text-violet">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">RPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 79%"></div>
+          <div class="spark-recent" style="width: 93%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">9.5</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>11.2
+          </div>
+        </div>
+      </div>
+
+      <!-- APG (stable) -->
+      <div class="flex items-center gap-3 text-sting">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">APG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 18%"></div>
+          <div class="spark-recent" style="width: 23%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">1.4</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>1.8
+          </div>
+        </div>
+      </div>
+
+      <!-- SPG (trending up) -->
+      <div class="flex items-center gap-3 text-orange">
+        <div class="w-10 text-[10px] font-bold text-text2 uppercase tracking-wider">SPG</div>
+        <div class="flex-1 spark-track">
+          <div class="spark-season" style="width: 58%"></div>
+          <div class="spark-recent" style="width: 68%"></div>
+        </div>
+        <div class="w-[72px] text-right tnum text-[12px] leading-tight">
+          <div class="text-text2 font-medium">2.9</div>
+          <div class="font-bold flex items-center justify-end gap-0.5">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>3.4
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-border"></div>
+
+    <!-- Shooting splits — mixed: FG good, 3PT low (red), FT below threshold (red) -->
+    <div class="px-5 py-4">
+      <div class="flex items-baseline justify-between mb-3">
+        <h3 class="text-[10px] font-bold text-text2 uppercase tracking-[0.12em]">Shooting</h3>
+        <span class="text-[10px] text-text3 tnum">last 5 vs season</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+
+        <!-- FG% — above 50% threshold → green -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#34d399" stroke-width="4"
+                      stroke-dasharray="84.95 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-emerald leading-none">52%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">68 / 131</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">FG</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-emerald font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>+3
+          </div>
+        </div>
+
+        <!-- 3PT% — below 33% threshold → red -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#fb7185" stroke-width="4"
+                      stroke-dasharray="29.40 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-loss leading-none">18%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">4 / 22</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">3PT</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-loss font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 9L1 3h8z"/></svg>−5
+          </div>
+        </div>
+
+        <!-- FT% — below 65% threshold → red -->
+        <div class="relative bg-surface2/60 rounded-xl p-3 border border-border flex flex-col items-center">
+          <div class="relative w-14 h-14 mb-1">
+            <svg viewBox="0 0 60 60" class="w-full h-full -rotate-90 ring-chart">
+              <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle class="fg" cx="30" cy="30" r="26" fill="none" stroke="#fb7185" stroke-width="4"
+                      stroke-dasharray="94.75 163.36" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="tnum text-[15px] font-black text-loss leading-none">58%</span>
+            </div>
+          </div>
+          <div class="tnum text-[10px] text-text2 font-medium">38 / 66</div>
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider mt-0.5">FT</div>
+          <div class="mt-1 inline-flex items-center gap-0.5 text-[9px] text-emerald font-bold tnum">
+            <svg viewBox="0 0 10 10" class="w-2 h-2" fill="currentColor"><path d="M5 1L9 7H1z"/></svg>+6
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="border-t border-border"></div>
+
+    <!-- Game log — Jordan's rebound-heavy nights -->
+    <div class="px-5 py-4">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <h3 class="text-[10px] font-bold text-text2 uppercase tracking-[0.12em]">Last 5 games</h3>
+        <span class="text-[10px] text-text3">Points shown</span>
+      </div>
+      <div class="grid grid-cols-5 gap-1.5" id="jordan-games">
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Bengals" data-score="62-48 W" data-line="8 pts · 12 reb · 2 ast · 3 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">BEN</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">8</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Oak Hill" data-score="71-59 W" data-line="6 pts · 10 reb · 1 ast · 4 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">OAK</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">6</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-text3 mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Lincoln" data-score="44-51 L" data-line="4 pts · 9 reb · 2 ast · 2 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">LIN</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">4</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-loss mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Westfield" data-score="55-49 W" data-line="9 pts · 14 reb · 2 ast · 3 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">WES</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">9</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5"></div>
+        </button>
+        <button class="game-tile flex flex-col items-center py-2 rounded-lg bg-surface2/60 border border-border"
+                data-opp="Northwest" data-score="68-52 W" data-line="7 pts · 11 reb · 2 ast · 5 stl">
+          <div class="text-[9px] font-bold text-text3 uppercase tracking-wider">NOR</div>
+          <div class="tnum text-[18px] font-black text-text leading-none mt-1">7</div>
+          <div class="w-1.5 h-1.5 rounded-full bg-text3 mt-1.5"></div>
+        </button>
+      </div>
+
+      <div id="jordan-detail" class="hidden mt-3 p-3 rounded-lg bg-surface2 border border-border">
+        <div class="flex items-center justify-between mb-1">
+          <div class="text-[13px] font-bold text-text">vs <span class="detail-opp">—</span></div>
+          <div class="tnum text-[11px] font-bold text-text2 detail-score">—</div>
+        </div>
+        <div class="text-[12px] text-text2 detail-line">—</div>
+      </div>
+    </div>
+
+    <!-- Context tabs -->
+    <div class="border-t border-border px-5 py-2.5 bg-bg/40">
+      <div class="flex gap-1 overflow-x-auto no-scrollbar">
+        <button class="ctx-tab active px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text2">All · 22</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">League · 14</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">Tournament · 6</button>
+        <button class="ctx-tab px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-text3 hover:text-text2">Scrimmage · 2</button>
+      </div>
+    </div>
+
+    <!-- Source footer — single source variant -->
+    <div class="border-t border-border px-5 py-2 bg-bg/60 flex items-center gap-2">
+      <svg viewBox="0 0 16 16" class="w-3 h-3 text-text3 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 4h12v8H2z"/>
+        <path d="M2 7h12"/>
+      </svg>
+      <p class="text-[10px] text-text3 leading-tight">
+        Source: <span class="text-text2 font-medium">22 game reports</span> <span class="text-text3/70">· no season CSV imported</span>
+      </p>
+    </div>
+  </article>
+
+  <!-- Design notes -->
+  <div class="pt-4 pb-8 text-[11px] text-text3 leading-relaxed">
+    <p class="font-bold text-text2 mb-1">Design notes</p>
+    <p>Dual-bar sparkline: muted base = season avg, bright stripe above = last 5. If the bright stripe extends past the base, that stat is trending up. Ring charts color-code at threshold (FG ≥50% / 3PT ≥33% / FT ≥65%). Trend pills pulse when up to draw the eye to hot stats. Role badges derive from stat thresholds; if 3+ qualify, show top 2 by weight.</p>
+  </div>
+
+</div>
+
+<script>
+// Game tile expand
+function wireGames(containerId, detailId) {
+  const tiles = document.querySelectorAll('#' + containerId + ' .game-tile');
+  const detail = document.getElementById(detailId);
+  tiles.forEach(t => {
+    t.addEventListener('click', () => {
+      const wasActive = t.classList.contains('active');
+      tiles.forEach(x => x.classList.remove('active'));
+      if (wasActive) {
+        detail.classList.add('hidden');
+        return;
+      }
+      t.classList.add('active');
+      detail.classList.remove('hidden');
+      detail.querySelector('.detail-opp').textContent = t.dataset.opp;
+      detail.querySelector('.detail-score').textContent = t.dataset.score;
+      detail.querySelector('.detail-line').textContent = t.dataset.line;
+    });
+  });
+}
+wireGames('marcus-games', 'marcus-detail');
+wireGames('jordan-games', 'jordan-detail');
+
+// Context tab toggle
+document.querySelectorAll('[role="tablist"], .border-t.border-border.px-5.py-2\\.5.bg-bg\\/40 > div').forEach(bar => {});
+document.querySelectorAll('article').forEach(card => {
+  const tabs = card.querySelectorAll('.ctx-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(x => {
+        x.classList.remove('active');
+        x.classList.remove('text-text2');
+        x.classList.add('text-text3');
+      });
+      tab.classList.add('active');
+      tab.classList.remove('text-text3');
+      tab.classList.add('text-text2');
+    });
+  });
+});
+</script>
+</body>
+</html>
