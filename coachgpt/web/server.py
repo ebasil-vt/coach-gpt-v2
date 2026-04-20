@@ -11,6 +11,8 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +24,15 @@ from coachgpt.pipeline import (
 )
 from coachgpt.league_import import parse_league_standings, parse_webarchive_schedule, save_league_data
 
-app = FastAPI(title="CoachGPT", docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lifespan(app):
+    db.init_db()
+    _seed_default_user()
+    yield
+
+
+app = FastAPI(title="CoachGPT", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
