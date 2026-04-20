@@ -29,8 +29,21 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Auth: user-based (SQLite) or fallback to single password (env var)
 APP_PASSWORD = os.environ.get("COACHGPT_PASSWORD", "")
-# token → {"username": str, "display_name": str, "role": str}
+SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+SECURE_COOKIES = os.environ.get("COACHGPT_HTTPS", "").lower() in ("true", "1", "yes")
+# token → {"username": str, "display_name": str, "role": str, "expires_at": float}
 _active_sessions: dict[str, dict] = {}
+
+
+def _get_session(token: str) -> dict | None:
+    """Return session if valid and not expired, else evict and return None."""
+    session = _active_sessions.get(token)
+    if not session:
+        return None
+    if time.monotonic() > session.get("expires_at", 0):
+        _active_sessions.pop(token, None)
+        return None
+    return session
 
 
 def _hash_password(password: str) -> str:
@@ -48,10 +61,17 @@ def _verify_password(password: str, password_hash: str) -> bool:
 
 
 def _seed_default_user():
-    """Create Coach Jason Peay if no users exist."""
+    """Create Coach Jason Peay if no users exist. Requires COACHGPT_DEFAULT_PASSWORD env var."""
     users = db.list_users()
     if not users:
-        default_pw = os.environ.get("COACHGPT_DEFAULT_PASSWORD", "sting2031")
+        default_pw = os.environ.get("COACHGPT_DEFAULT_PASSWORD", "")
+        if not default_pw:
+            import logging
+            logging.warning(
+                "COACHGPT_DEFAULT_PASSWORD not set — skipping default user seed. "
+                "Set this env var to create the initial coach account."
+            )
+            return
         db.create_user(
             username="jpeay",
             password_hash=_hash_password(default_pw),
@@ -77,6 +97,7 @@ _login_buckets: dict[str, list[float]] = defaultdict(list)
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
 MAX_NOTES_LENGTH = 10_000
 MAX_METADATA_LENGTH = 1_000
+MAX_OPPONENT_LENGTH = 200
 
 
 def _get_client_ip(request: Request) -> str:
@@ -117,7 +138,7 @@ async def auth_and_rate_limit(request: Request, call_next):
     # Skip auth for known static assets, login, and health check.
     # NOTE: /static serves only frontend assets (index.html, CSS, JS, images).
     # Never place data, config, or sensitive files in the static/ directory.
-    _public_paths = ("/static/index.html", "/static/", "/login", "/health")
+    _public_paths = ("/static/index.html", "/login", "/health")
     if any(path.startswith(p) or path == p for p in _public_paths):
         response = await call_next(request)
         _add_security_headers(response)
@@ -135,7 +156,7 @@ async def auth_and_rate_limit(request: Request, call_next):
     auth_required = _has_users() or APP_PASSWORD
     if auth_required and path != "/" and path != "/logout":
         token = request.cookies.get("coachgpt_token")
-        if token not in _active_sessions:
+        if not _get_session(token):
             if path.startswith("/api/"):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             return RedirectResponse("/")
@@ -151,12 +172,21 @@ def _add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
     )
 
 
 def _safe_error(e: Exception) -> str:
     """Sanitize error messages — never expose internal paths, AWS details, or tracebacks."""
+    import sqlite3
+    # Database errors may reveal schema details — never expose
+    if isinstance(e, sqlite3.Error):
+        return "Database error. Please try again."
     msg = str(e)
     # Strip filesystem paths
     if "/" in msg or "\\" in msg:
@@ -187,7 +217,7 @@ async def home(request: Request):
     auth_required = _has_users() or APP_PASSWORD
     if auth_required:
         token = request.cookies.get("coachgpt_token")
-        if token not in _active_sessions:
+        if not _get_session(token):
             return HTMLResponse(_login_page())
     return (STATIC_DIR / "index.html").read_text()
 
@@ -211,26 +241,28 @@ async def login(request: Request):
                 "username": user["username"],
                 "display_name": user["display_name"],
                 "role": user["role"],
+                "expires_at": time.monotonic() + SESSION_MAX_AGE,
             }
             response = RedirectResponse("/", status_code=303)
             response.set_cookie(
-                "coachgpt_token", token, max_age=60*60*24*30,
-                httponly=True, samesite="strict",
+                "coachgpt_token", token, max_age=SESSION_MAX_AGE,
+                httponly=True, samesite="strict", secure=SECURE_COOKIES,
             )
             return response
         return HTMLResponse(_login_page(error="Invalid username or password."))
 
     # Fallback: single password mode (no username required)
-    if APP_PASSWORD and password == APP_PASSWORD:
+    if APP_PASSWORD and secrets.compare_digest(password, APP_PASSWORD):
         token = secrets.token_hex(32)
         _active_sessions[token] = {
             "username": "coach",
             "display_name": "Coach",
             "role": "coach",
+            "expires_at": time.monotonic() + SESSION_MAX_AGE,
         }
         response = RedirectResponse("/", status_code=303)
         response.set_cookie(
-            "coachgpt_token", token, max_age=60*60*24*30,
+            "coachgpt_token", token, max_age=SESSION_MAX_AGE,
             httponly=True, samesite="strict",
         )
         return response
@@ -252,7 +284,7 @@ async def logout(request: Request):
 async def api_me(request: Request):
     """Return current user info for the frontend."""
     token = request.cookies.get("coachgpt_token")
-    session = _active_sessions.get(token)
+    session = _get_session(token)
     if session:
         return JSONResponse({
             "signed_in": True,
@@ -264,7 +296,8 @@ async def api_me(request: Request):
 
 
 def _login_page(error=""):
-    err_html = f'<p style="color:#ff453a;margin-bottom:16px;">{error}</p>' if error else ''
+    from html import escape as _esc
+    err_html = f'<p style="color:#ff453a;margin-bottom:16px;">{_esc(error)}</p>' if error else ''
     # Show username field if users exist, otherwise password-only
     has_users = _has_users()
     username_field = (
@@ -388,6 +421,8 @@ async def api_process_game_stream(
 @app.post("/api/scout/{opponent}/stream")
 async def api_scout_stream(opponent: str):
     """Scout an opponent and stream agent progress via SSE."""
+    if len(opponent) > MAX_OPPONENT_LENGTH:
+        return JSONResponse({"error": "Opponent name too long."}, status_code=400)
     def generate():
         q = queue.Queue()
 
@@ -425,6 +460,8 @@ async def api_scout_stream(opponent: str):
 @app.post("/api/pregame/{opponent}/stream")
 async def api_pregame_stream(opponent: str):
     """Generate a pre-game brief and stream agent progress via SSE."""
+    if len(opponent) > MAX_OPPONENT_LENGTH:
+        return JSONResponse({"error": "Opponent name too long."}, status_code=400)
     def generate():
         q = queue.Queue()
 
@@ -462,6 +499,8 @@ async def api_pregame_stream(opponent: str):
 @app.post("/api/research/{opponent}/stream")
 async def api_research_stream(opponent: str, league_info: str = ""):
     """Research an opponent we haven't played — find their record online."""
+    if len(opponent) > MAX_OPPONENT_LENGTH:
+        return JSONResponse({"error": "Opponent name too long."}, status_code=400)
     def generate():
         q = queue.Queue()
 
@@ -801,43 +840,81 @@ async def api_update_opponent_player(player_id: str, request: Request):
     action = data.get("action")  # "delete_tendency", "add_tendency", "delete_player"
 
     conn = db.get_connection()
-    row = conn.execute("SELECT * FROM opponent_players WHERE id = ?", (player_id,)).fetchone()
-    if not row:
-        conn.close()
-        return JSONResponse({"error": "Player not found"}, status_code=404)
+    try:
+        row = conn.execute("SELECT * FROM opponent_players WHERE id = ?", (player_id,)).fetchone()
+        if not row:
+            return JSONResponse({"error": "Player not found"}, status_code=404)
 
-    if action == "delete_player":
-        conn.execute("DELETE FROM opponent_players WHERE id = ?", (player_id,))
-        conn.commit()
-        conn.close()
-        return JSONResponse({"ok": True})
-
-    tendencies = jsonlib.loads(row["tendencies"] or "[]")
-
-    if action == "delete_tendency":
-        idx = data.get("index", -1)
-        if 0 <= idx < len(tendencies):
-            tendencies.pop(idx)
-            conn.execute("UPDATE opponent_players SET tendencies = ? WHERE id = ?",
-                         (jsonlib.dumps(tendencies), player_id))
+        if action == "delete_player":
+            conn.execute("DELETE FROM opponent_players WHERE id = ?", (player_id,))
             conn.commit()
+            return JSONResponse({"ok": True})
 
-    elif action == "add_tendency":
-        new_tendency = data.get("tendency", "").strip()
-        if new_tendency and new_tendency not in tendencies:
-            tendencies.append(new_tendency)
-            conn.execute("UPDATE opponent_players SET tendencies = ? WHERE id = ?",
-                         (jsonlib.dumps(tendencies), player_id))
-            conn.commit()
+        tendencies = jsonlib.loads(row["tendencies"] or "[]")
 
-    conn.close()
-    return JSONResponse({"ok": True, "tendencies": tendencies})
+        if action == "delete_tendency":
+            idx = data.get("index", -1)
+            if 0 <= idx < len(tendencies):
+                tendencies.pop(idx)
+                conn.execute("UPDATE opponent_players SET tendencies = ? WHERE id = ?",
+                             (jsonlib.dumps(tendencies), player_id))
+                conn.commit()
+
+        elif action == "add_tendency":
+            new_tendency = data.get("tendency", "").strip()
+            if new_tendency and new_tendency not in tendencies:
+                tendencies.append(new_tendency)
+                conn.execute("UPDATE opponent_players SET tendencies = ? WHERE id = ?",
+                             (jsonlib.dumps(tendencies), player_id))
+                conn.commit()
+
+        return JSONResponse({"ok": True, "tendencies": tendencies})
+    finally:
+        conn.close()
 
 
 @app.get("/api/opponent-players")
 async def api_all_opponent_players():
     players = db.get_all_opponent_players()
     return JSONResponse(players)
+
+
+@app.get("/api/player-cards")
+async def api_player_cards():
+    """Return aggregated player card data from per-game box scores."""
+    return JSONResponse(db.get_player_cards())
+
+
+# ── Coach Notes API ─────────────────────────────────────────────
+
+@app.get("/api/notes")
+async def api_list_notes():
+    return JSONResponse(db.list_coach_notes())
+
+
+@app.get("/api/note/{note_id}")
+async def api_get_note(note_id: str):
+    note = db.get_coach_note(note_id)
+    if not note:
+        return JSONResponse({"error": "Note not found"}, status_code=404)
+    return JSONResponse(note)
+
+
+@app.post("/api/note")
+async def api_save_note(request: Request):
+    data = await request.json()
+    note_id = data.get("id", str(__import__('uuid').uuid4())[:8])
+    content = data.get("content", "")
+    opponent = data.get("opponent", "")
+    date = data.get("date", "")
+    db.save_coach_note(note_id, content, opponent, date)
+    return JSONResponse({"id": note_id, "ok": True})
+
+
+@app.delete("/api/note/{note_id}")
+async def api_delete_note(note_id: str):
+    db.delete_coach_note(note_id)
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/season/{season_id}/identity")

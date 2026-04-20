@@ -189,7 +189,24 @@ def analyze_game(game_data: dict) -> dict:
         lines = [l for l in lines if not l.startswith("```")]
         raw_text = "\n".join(lines)
 
-    return json.loads(raw_text)
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError:
+        # Try to extract JSON from the response if model added extra text
+        import re
+        match = re.search(r'\{[\s\S]*\}', raw_text)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+        return {
+            "patterns_detected": [],
+            "key_insights": ["Analysis returned unexpected format — raw output preserved"],
+            "team_tendencies": {},
+            "opponent_analysis": {},
+            "raw_output": raw_text[:2000],
+        }
 
 
 def analyze_opponent(opponent_games: list[dict]) -> dict:

@@ -21,7 +21,15 @@ _data_dir = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", str(Path(__file__).paren
 REPORTS_DIR = Path(_data_dir) / "reports"
 
 
-def _store_structured_data(structured: dict, raw_notes: str = "") -> str:
+def _extract_metadata_field(text: str, field: str) -> str | None:
+    """Extract a field like 'Game type: tournament' from metadata text."""
+    import re
+    match = re.search(rf'{field}:\s*([^.]+)', text, re.IGNORECASE)
+    return match.group(1).strip() if match else None
+
+
+def _store_structured_data(structured: dict, raw_notes: str = "",
+                           game_type: str = None, event_name: str = None) -> str:
     """Store parsed game data in the database. Returns game_id."""
     game_info = structured["game"]
     game_id = db.create_game(
@@ -33,6 +41,8 @@ def _store_structured_data(structured: dict, raw_notes: str = "") -> str:
         our_score=game_info.get("our_score"),
         opp_score=game_info.get("opp_score"),
         notes=raw_notes,
+        game_type=game_type or game_info.get("game_type"),
+        event_name=event_name or game_info.get("event_name"),
     )
 
     if structured.get("our_player_stats"):
@@ -106,7 +116,11 @@ def process_game(raw_input: str, callback=None) -> dict:
     emit("ingestion", "done", f"Parsed: {opponent} — {game_info.get('our_score', '?')}-{game_info.get('opp_score', '?')}")
 
     emit("orchestrator", "storing", "Saving structured data to database...")
-    game_id = _store_structured_data(structured, raw_input)
+    game_id = _store_structured_data(
+        structured, raw_input,
+        game_type=_extract_metadata_field(raw_input, "Game type"),
+        event_name=_extract_metadata_field(raw_input, "Event"),
+    )
     player_count = len(structured.get("our_player_stats", [])) + len(structured.get("opp_player_stats", []))
     obs_count = len(structured.get("observations", []))
     emit("orchestrator", "stored", f"Stored: {player_count} player records, {obs_count} observations")
@@ -156,7 +170,12 @@ def process_game_image(image_bytes: bytes, media_type: str,
     emit("ingestion", "done", f"Extracted stats: {opponent} — {game_info.get('our_score', '?')}-{game_info.get('opp_score', '?')}")
 
     emit("orchestrator", "storing", "Saving to database...")
-    game_id = _store_structured_data(structured, coach_notes)
+    combined_meta = f"{metadata} {coach_notes}"
+    game_id = _store_structured_data(
+        structured, coach_notes,
+        game_type=_extract_metadata_field(combined_meta, "Game type"),
+        event_name=_extract_metadata_field(combined_meta, "Event"),
+    )
     player_count = len(structured.get("our_player_stats", [])) + len(structured.get("opp_player_stats", []))
     obs_count = len(structured.get("observations", []))
     emit("orchestrator", "stored", f"Stored: {player_count} players, {obs_count} observations")
@@ -204,7 +223,12 @@ def process_game_pdf(pdf_bytes: bytes, coach_notes: str = "",
     emit("ingestion", "done", f"Extracted: {opponent} — {game_info.get('our_score', '?')}-{game_info.get('opp_score', '?')}")
 
     emit("orchestrator", "storing", "Saving to database...")
-    game_id = _store_structured_data(structured, coach_notes)
+    combined_meta = f"{metadata} {coach_notes}"
+    game_id = _store_structured_data(
+        structured, coach_notes,
+        game_type=_extract_metadata_field(combined_meta, "Game type"),
+        event_name=_extract_metadata_field(combined_meta, "Event"),
+    )
     emit("orchestrator", "stored", "Data stored")
 
     emit("orchestrator", "routing", "Handing off to Analyst Agent...")

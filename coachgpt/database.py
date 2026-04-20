@@ -31,6 +31,8 @@ def init_db():
             opponent TEXT NOT NULL,
             our_team TEXT,
             location TEXT,
+            game_type TEXT DEFAULT 'league',  -- league, tournament, scrimmage, playoff
+            event_name TEXT,                  -- 'HCRPS 8th Grade', 'MD Sting Classic', etc.
             result TEXT,          -- 'W' or 'L'
             our_score INTEGER,
             opp_score INTEGER,
@@ -227,6 +229,18 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS coach_notes (
+            id TEXT PRIMARY KEY,
+            opponent TEXT,
+            date TEXT,
+            content TEXT NOT NULL DEFAULT '',
+            status TEXT DEFAULT 'active',   -- 'active', 'used' (attached to a game)
+            game_id TEXT,                   -- linked game after processing
+            updated_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_coach_notes_status ON coach_notes(status);
         CREATE INDEX IF NOT EXISTS idx_scouted_teams_name ON scouted_teams(normalized_name);
         CREATE INDEX IF NOT EXISTS idx_scouted_teams_event ON scouted_teams(event_id);
 
@@ -239,6 +253,15 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_season_roster_player ON season_roster(player_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_roster_name ON roster(first_name, last_name);
     """)
+    conn.commit()
+
+    # Migrate existing databases — add columns if missing (safe to re-run)
+    cursor = conn.execute("PRAGMA table_info(games)")
+    existing_cols = {row["name"] for row in cursor.fetchall()}
+    if "game_type" not in existing_cols:
+        conn.execute("ALTER TABLE games ADD COLUMN game_type TEXT DEFAULT 'league'")
+    if "event_name" not in existing_cols:
+        conn.execute("ALTER TABLE games ADD COLUMN event_name TEXT")
     conn.commit()
     conn.close()
 
@@ -279,15 +302,16 @@ def list_users() -> list[dict]:
 def create_game(opponent: str, date: str, our_team: str = None,
                 location: str = None, result: str = None,
                 our_score: int = None, opp_score: int = None,
-                notes: str = None) -> str:
+                notes: str = None, game_type: str = None,
+                event_name: str = None) -> str:
     game_id = str(uuid.uuid4())[:8]
     conn = get_connection()
     conn.execute(
         """INSERT INTO games (id, date, opponent, our_team, location, result,
-           our_score, opp_score, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           our_score, opp_score, notes, game_type, event_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (game_id, date, opponent, our_team, location, result,
-         our_score, opp_score, notes)
+         our_score, opp_score, notes, game_type or 'league', event_name)
     )
     conn.commit()
     conn.close()
@@ -849,6 +873,204 @@ def get_scouted_teams_by_event(event_id: str) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── Coach Notes ─────────────────────────────────────────────────
+
+def save_coach_note(note_id: str, content: str, opponent: str = "",
+                    date: str = "") -> str:
+    """Create or update a coach note. Returns note_id."""
+    conn = get_connection()
+    existing = conn.execute("SELECT id FROM coach_notes WHERE id = ?", (note_id,)).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE coach_notes SET content = ?, opponent = ?, date = ?, updated_at = datetime('now') WHERE id = ?",
+            (content, opponent, date, note_id)
+        )
+    else:
+        conn.execute(
+            "INSERT INTO coach_notes (id, content, opponent, date) VALUES (?, ?, ?, ?)",
+            (note_id, content, opponent, date)
+        )
+    conn.commit()
+    conn.close()
+    return note_id
+
+
+def list_coach_notes(status: str = "active") -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM coach_notes WHERE status = ? ORDER BY updated_at DESC",
+        (status,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_coach_note(note_id: str) -> dict | None:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM coach_notes WHERE id = ?", (note_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_coach_note(note_id: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM coach_notes WHERE id = ?", (note_id,))
+    conn.commit()
+    conn.close()
+
+
+def use_coach_note(note_id: str, game_id: str):
+    """Mark a note as used and link it to a game."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE coach_notes SET status = 'used', game_id = ? WHERE id = ?",
+        (game_id, note_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_player_cards(season_id: str = None) -> list[dict]:
+    """Aggregate player stats from per-game box scores into card data.
+
+    Returns list of player dicts with season totals, per-game averages,
+    last-5 averages, shooting splits, and recent game log.
+    Each player is identified by jersey number (player_number).
+    """
+    conn = get_connection()
+
+    # Get all our players' per-game stats, joined with game info
+    query = """
+        SELECT ps.*, g.date, g.opponent, g.result, g.our_score, g.opp_score,
+               g.game_type, g.event_name
+        FROM player_stats ps
+        JOIN games g ON ps.game_id = g.id
+        WHERE ps.team = 'ours'
+        ORDER BY g.date DESC
+    """
+    rows = conn.execute(query).fetchall()
+    conn.close()
+
+    if not rows:
+        return []
+
+    # Group by player_number
+    from collections import defaultdict
+    players = defaultdict(list)
+    for r in rows:
+        d = dict(r)
+        players[d["player_number"]].append(d)
+
+    cards = []
+    for number, games in players.items():
+        # Sort by date descending (already sorted but ensure)
+        games.sort(key=lambda g: g.get("date", ""), reverse=True)
+
+        total_games = len(games)
+        if total_games == 0:
+            continue
+
+        # Use most recent name
+        name = games[0].get("player_name", f"#{number}")
+
+        # Season totals
+        total_pts = sum(g.get("points", 0) for g in games)
+        total_reb = sum(g.get("rebounds", 0) for g in games)
+        total_ast = sum(g.get("assists", 0) for g in games)
+        total_stl = sum(g.get("steals", 0) for g in games)
+        total_blk = sum(g.get("blocks", 0) for g in games)
+        total_to  = sum(g.get("turnovers", 0) for g in games)
+        total_fg_m = sum(g.get("fg_made", 0) for g in games)
+        total_fg_a = sum(g.get("fg_attempted", 0) for g in games)
+        total_3_m  = sum(g.get("three_made", 0) for g in games)
+        total_3_a  = sum(g.get("three_attempted", 0) for g in games)
+        total_ft_m = sum(g.get("ft_made", 0) for g in games)
+        total_ft_a = sum(g.get("ft_attempted", 0) for g in games)
+
+        ppg = round(total_pts / total_games, 1)
+        rpg = round(total_reb / total_games, 1)
+        apg = round(total_ast / total_games, 1)
+        spg = round(total_stl / total_games, 1)
+        bpg = round(total_blk / total_games, 1)
+        topg = round(total_to / total_games, 1)
+
+        fg_pct = round(total_fg_m / total_fg_a, 3) if total_fg_a > 0 else 0
+        three_pct = round(total_3_m / total_3_a, 3) if total_3_a > 0 else 0
+        ft_pct = round(total_ft_m / total_ft_a, 3) if total_ft_a > 0 else 0
+
+        # Last 5 games averages
+        last5 = games[:5]
+        l5_count = len(last5)
+        l5_ppg = round(sum(g.get("points", 0) for g in last5) / l5_count, 1) if l5_count else 0
+        l5_rpg = round(sum(g.get("rebounds", 0) for g in last5) / l5_count, 1) if l5_count else 0
+        l5_apg = round(sum(g.get("assists", 0) for g in last5) / l5_count, 1) if l5_count else 0
+        l5_spg = round(sum(g.get("steals", 0) for g in last5) / l5_count, 1) if l5_count else 0
+
+        l5_fg_m = sum(g.get("fg_made", 0) for g in last5)
+        l5_fg_a = sum(g.get("fg_attempted", 0) for g in last5)
+        l5_3_m  = sum(g.get("three_made", 0) for g in last5)
+        l5_3_a  = sum(g.get("three_attempted", 0) for g in last5)
+        l5_ft_m = sum(g.get("ft_made", 0) for g in last5)
+        l5_ft_a = sum(g.get("ft_attempted", 0) for g in last5)
+        l5_fg_pct = round(l5_fg_m / l5_fg_a, 3) if l5_fg_a > 0 else 0
+        l5_three_pct = round(l5_3_m / l5_3_a, 3) if l5_3_a > 0 else 0
+        l5_ft_pct = round(l5_ft_m / l5_ft_a, 3) if l5_ft_a > 0 else 0
+
+        # Game type breakdown
+        type_counts = defaultdict(int)
+        for g in games:
+            type_counts[g.get("game_type", "league")] += 1
+
+        # Recent game log (last 5)
+        game_log = []
+        for g in last5:
+            game_log.append({
+                "opponent": g.get("opponent", "?"),
+                "date": g.get("date", ""),
+                "score": f"{g.get('our_score', '?')}-{g.get('opp_score', '?')} {g.get('result', '')}",
+                "points": g.get("points", 0),
+                "rebounds": g.get("rebounds", 0),
+                "assists": g.get("assists", 0),
+                "steals": g.get("steals", 0),
+                "above_avg": g.get("points", 0) > ppg,
+                "game_type": g.get("game_type", "league"),
+            })
+
+        cards.append({
+            "number": number,
+            "name": name,
+            "games_played": total_games,
+            # Season averages
+            "ppg": ppg, "rpg": rpg, "apg": apg, "spg": spg, "bpg": bpg, "topg": topg,
+            # Last 5 averages
+            "l5_ppg": l5_ppg, "l5_rpg": l5_rpg, "l5_apg": l5_apg, "l5_spg": l5_spg,
+            # Shooting totals
+            "fg_made": total_fg_m, "fg_attempted": total_fg_a, "fg_pct": fg_pct,
+            "three_made": total_3_m, "three_attempted": total_3_a, "three_pct": three_pct,
+            "ft_made": total_ft_m, "ft_attempted": total_ft_a, "ft_pct": ft_pct,
+            # Last 5 shooting
+            "l5_fg_pct": l5_fg_pct, "l5_three_pct": l5_three_pct, "l5_ft_pct": l5_ft_pct,
+            # Trends (positive = improving)
+            "ppg_trend": round(l5_ppg - ppg, 1),
+            "rpg_trend": round(l5_rpg - rpg, 1),
+            "apg_trend": round(l5_apg - apg, 1),
+            "spg_trend": round(l5_spg - spg, 1),
+            "fg_trend": round((l5_fg_pct - fg_pct) * 100, 0),
+            "three_trend": round((l5_three_pct - three_pct) * 100, 0),
+            "ft_trend": round((l5_ft_pct - ft_pct) * 100, 0),
+            # Game type counts
+            "type_counts": dict(type_counts),
+            # Recent games
+            "game_log": game_log,
+            # Source
+            "source": "game_reports",
+        })
+
+    # Sort by PPG descending
+    cards.sort(key=lambda c: c["ppg"], reverse=True)
+    return cards
 
 
 # Initialize on import
