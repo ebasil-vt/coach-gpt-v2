@@ -325,12 +325,17 @@ def _login_page(error=""):
     p.sub{{color:#9298a8;font-size:14px;margin-bottom:24px;}}
     input{{width:100%;padding:12px;background:#242836;border:1px solid #2e3345;border-radius:8px;color:#e4e6ed;font-size:15px;box-sizing:border-box;}}
     input:focus{{outline:none;border-color:#4f8ff7;}}
-    button{{width:100%;padding:12px;background:#4f8ff7;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:16px;}}
-    button:hover{{background:#3b7ae0;}}</style></head>
+    .pw-wrap{{position:relative;margin-bottom:0;}}
+    .pw-wrap input{{padding-right:44px;}}
+    .pw-toggle{{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#9298a8;cursor:pointer;font-size:18px;padding:0;width:auto;margin:0;}}
+    .pw-toggle:hover{{color:#e4e6ed;background:none;}}
+    button[type=submit]{{width:100%;padding:12px;background:#4f8ff7;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:16px;}}
+    button[type=submit]:hover{{background:#3b7ae0;}}</style></head>
     <body><div class="box"><h1>Coach<span>GPT</span></h1><p class="sub">{subtitle}</p>
     {err_html}
     <form method="POST" action="/login">{username_field}
-    <input type="password" name="password" placeholder="Password"{autofocus}>
+    <div class="pw-wrap"><input type="password" name="password" id="pw" placeholder="Password"{autofocus}>
+    <button type="button" class="pw-toggle" onclick="var p=document.getElementById('pw');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈';">👁</button></div>
     <button type="submit">Sign In</button></form></div></body></html>"""
 
 
