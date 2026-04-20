@@ -2419,7 +2419,7 @@ async function loadGames() {
 
     if (games.length === 0) {
       container.innerHTML = `
-        <div class="text-center py-16 px-6 text-text2">
+        <div class="xl:col-span-2 text-center py-16 px-6 text-text2">
           <div class="text-5xl mb-3 opacity-50">🏀</div>
           <p class="text-sm">No games yet.</p>
           <p class="text-xs mt-1">Process your first game to get started.</p>
@@ -2521,7 +2521,7 @@ async function loadReports() {
 
     if (reports.length === 0) {
       container.innerHTML = `
-        <div class="text-center py-16 px-6 text-text2">
+        <div class="xl:col-span-2 text-center py-16 px-6 text-text2">
           <div class="text-5xl mb-3 opacity-50">📋</div>
           <p class="text-sm">No reports yet.</p>
         </div>`;
