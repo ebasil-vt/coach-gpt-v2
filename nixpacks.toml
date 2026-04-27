@@ -1,0 +1,21 @@
+# Two-language build for Railway / nixpacks: Python 3.13 (FastAPI backend) +
+# Node 22 (Next.js shadcn frontend). The Next app is exported to web/out/ at
+# build time and served by FastAPI as static files in production.
+
+[phases.setup]
+nixPkgs = ["python313", "nodejs_22"]
+
+[phases.install]
+cmds = [
+    "python -m pip install --upgrade pip",
+    "pip install -r requirements.txt",
+    "cd web && npm ci",
+]
+
+[phases.build]
+cmds = [
+    "cd web && NODE_ENV=production npm run build",
+]
+
+[start]
+cmd = "python -m uvicorn coachgpt.web.server:app --host 0.0.0.0 --port ${PORT:-8080}"
