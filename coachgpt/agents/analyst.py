@@ -35,12 +35,12 @@ Your output MUST be valid JSON with this structure:
   "opponent_metrics": {
     same structure
   },
-  "quarter_flow": {
-    "description": "How the game momentum shifted",
-    "our_scoring_by_quarter": {"Q1": int, ...},
-    "opp_scoring_by_quarter": {"Q1": int, ...},
-    "best_quarter": "Q3",
-    "worst_quarter": "Q1",
+  "half_flow": {
+    "description": "How the game momentum shifted between halves",
+    "our_scoring_by_half": {"H1": int, "H2": int},
+    "opp_scoring_by_half": {"H1": int, "H2": int},
+    "best_half": "H1" or "H2",
+    "worst_half": "H1" or "H2",
     "momentum_shifts": ["description of shifts"]
   },
   "key_performers": [
@@ -73,11 +73,19 @@ Your output MUST be valid JSON with this structure:
   }
 }
 
+GAME FORMAT — CRITICAL:
+Games in this league have TWO HALVES (H1 and H2). There are NO QUARTERS.
+If the source data exposes Q1/Q2/Q3/Q4, fold them: Q1+Q2 → H1, Q3+Q4 → H2.
+Never emit Q1/Q2/Q3/Q4 keys or mention quarters anywhere in the output.
+If only one half of data is available, set the missing half to null and
+note it in `data_quality.missing` as "H2 stats" (or H1) — never as "Q3"
+or "Q4".
+
 Analysis principles:
 - Calculate derived stats: FG%, 3PT%, FT%, assist-to-turnover ratio
 - Estimate possessions: 0.5 * ((our_fga + 0.4*our_fta - 1.07*our_oreb*(our_fga-our_fgm)/(our_fga-our_fgm+1) + our_tov) + same for opp). Or use simpler: FGA - OREB + TOV + 0.44*FTA
 - Identify the top 2-3 performers on each side
-- Look for quarter-to-quarter momentum shifts
+- Look for half-to-half momentum shifts (H1 → H2)
 - Cross-reference coach observations with statistical evidence
 - When data is thin, say so explicitly — don't over-interpret
 - Every pattern needs evidence (specific numbers, not vibes)
