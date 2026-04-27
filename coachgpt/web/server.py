@@ -248,17 +248,17 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Serve the new shadcn UI if web/out is present, otherwise fall back to
-    the legacy single-page index. Auth is handled client-side by the new UI
-    (it calls /api/me on mount and redirects to /login as needed)."""
-    if SERVE_NEW_UI:
-        return HTMLResponse((WEB_OUT_DIR / "index.html").read_text())
-
+    """Serve the dashboard if signed in, otherwise bounce to /login.
+    With the new shadcn UI present this matches its sidebar gating;
+    falls back to the legacy single-page index when out/ is absent."""
     auth_required = _has_users() or APP_PASSWORD
     if auth_required:
         token = request.cookies.get("coachgpt_token")
         if not _get_session(token):
             return RedirectResponse("/login")
+
+    if SERVE_NEW_UI:
+        return HTMLResponse((WEB_OUT_DIR / "index.html").read_text())
     return (STATIC_DIR / "index.html").read_text()
 
 
