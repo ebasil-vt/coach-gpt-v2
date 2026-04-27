@@ -297,6 +297,26 @@ def list_users() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def update_user_password(user_id: str, password_hash: str) -> bool:
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id)
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def update_user_display_name(user_id: str, display_name: str) -> bool:
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE users SET display_name = ? WHERE id = ?", (display_name, user_id)
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
 # ── Game Operations ──────────────────────────────────────────────
 
 def create_game(opponent: str, date: str, our_team: str = None,

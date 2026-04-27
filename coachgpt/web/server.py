@@ -14,6 +14,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -34,8 +35,27 @@ async def lifespan(app):
 
 app = FastAPI(title="CoachGPT", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
+# Comma-separated list of dev origins allowed to call /api/*. Empty in prod.
+_cors_origins = [
+    o.strip() for o in os.environ.get("COACHGPT_CORS_ORIGINS", "").split(",") if o.strip()
+]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Static export of the Next.js shadcn UI. If the directory exists, the new UI
+# is served at the root and `/legacy` is reserved for the original index.html.
+# In dev (when `web/out` is empty), the legacy UI continues to serve at `/`.
+WEB_OUT_DIR = Path(__file__).parent.parent.parent / "web" / "out"
+SERVE_NEW_UI = WEB_OUT_DIR.is_dir() and (WEB_OUT_DIR / "index.html").is_file()
 
 # Auth: user-based (SQLite) or fallback to single password (env var)
 APP_PASSWORD = os.environ.get("COACHGPT_PASSWORD", "")
@@ -97,7 +117,7 @@ def _has_users() -> bool:
 
 # ── Rate Limiting ────────────────────────────────────────────────
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT = int(os.environ.get("COACHGPT_RATE_LIMIT", "30"))  # requests per window
+RATE_LIMIT = int(os.environ.get("COACHGPT_RATE_LIMIT", "120"))  # requests per window
 RATE_WINDOW = int(os.environ.get("COACHGPT_RATE_WINDOW", "60"))  # seconds
 
 
@@ -148,19 +168,23 @@ async def auth_and_rate_limit(request: Request, call_next):
     # Skip auth for known static assets, login, and health check.
     # NOTE: /static serves only frontend assets (index.html, CSS, JS, images).
     # Never place data, config, or sensitive files in the static/ directory.
-    _public_paths = ("/static/index.html", "/login", "/health")
+    # /_next is the Next.js static export's bundled JS/CSS — must be public.
+    _public_paths = ("/static/index.html", "/login", "/health", "/_next/", "/favicon.ico")
     if any(path.startswith(p) or path == p for p in _public_paths):
         response = await call_next(request)
         _add_security_headers(response)
         return response
 
-    # Rate limit all requests
-    client_ip = _get_client_ip(request)
-    if not _check_rate_limit(client_ip):
-        return JSONResponse(
-            {"error": "Too many requests. Please wait before trying again."},
-            status_code=429,
-        )
+    # Rate limit only mutating / API requests. Static page navigations and
+    # Next.js RSC prefetches (HEAD, /__next._*.txt) shouldn't count against
+    # the bucket — they're cheap and a real user fires many on every hover.
+    if request.method != "GET" or path.startswith("/api/"):
+        client_ip = _get_client_ip(request)
+        if not _check_rate_limit(client_ip):
+            return JSONResponse(
+                {"error": "Too many requests. Please wait before trying again."},
+                status_code=429,
+            )
 
     # Auth check — user-based or single-password
     auth_required = _has_users() or APP_PASSWORD
@@ -169,7 +193,7 @@ async def auth_and_rate_limit(request: Request, call_next):
         if not _get_session(token):
             if path.startswith("/api/"):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            return RedirectResponse("/")
+            return RedirectResponse("/login")
 
     response = await call_next(request)
     _add_security_headers(response)
@@ -224,12 +248,38 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    """Serve the new shadcn UI if web/out is present, otherwise fall back to
+    the legacy single-page index. Auth is handled client-side by the new UI
+    (it calls /api/me on mount and redirects to /login as needed)."""
+    if SERVE_NEW_UI:
+        return HTMLResponse((WEB_OUT_DIR / "index.html").read_text())
+
     auth_required = _has_users() or APP_PASSWORD
     if auth_required:
         token = request.cookies.get("coachgpt_token")
         if not _get_session(token):
-            return HTMLResponse(_login_page())
+            return RedirectResponse("/login")
     return (STATIC_DIR / "index.html").read_text()
+
+
+@app.get("/legacy", response_class=HTMLResponse)
+async def legacy_home(request: Request):
+    """Original single-page UI. Always available as a fallback while the
+    shadcn migration shakes out."""
+    auth_required = _has_users() or APP_PASSWORD
+    if auth_required:
+        token = request.cookies.get("coachgpt_token")
+        if not _get_session(token):
+            return RedirectResponse("/login")
+    return (STATIC_DIR / "index.html").read_text()
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login form. New UI takes precedence; legacy form as fallback."""
+    if SERVE_NEW_UI and (WEB_OUT_DIR / "login" / "index.html").is_file():
+        return HTMLResponse((WEB_OUT_DIR / "login" / "index.html").read_text())
+    return HTMLResponse(_login_page())
 
 
 @app.post("/login")
@@ -292,17 +342,76 @@ async def logout(request: Request):
 
 @app.get("/api/me")
 async def api_me(request: Request):
-    """Return current user info for the frontend."""
+    """Return current user info, reading display_name fresh from DB so
+    profile updates show up without a re-login."""
     token = request.cookies.get("coachgpt_token")
     session = _get_session(token)
-    if session:
-        return JSONResponse({
-            "signed_in": True,
-            "display_name": session["display_name"],
-            "username": session["username"],
-            "role": session["role"],
-        })
-    return JSONResponse({"signed_in": False})
+    if not session:
+        return JSONResponse({"signed_in": False})
+    user = db.get_user_by_username(session["username"])
+    return JSONResponse({
+        "signed_in": True,
+        "display_name": (user or {}).get("display_name", session["display_name"]),
+        "username": session["username"],
+        "role": (user or {}).get("role", session["role"]),
+    })
+
+
+@app.post("/api/account/password")
+async def api_change_password(request: Request):
+    """Change current user's password. Requires old + new password."""
+    token = request.cookies.get("coachgpt_token")
+    session = _get_session(token)
+    if not session:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    old_pw = body.get("old_password", "")
+    new_pw = body.get("new_password", "")
+
+    if not old_pw or not new_pw:
+        return JSONResponse({"error": "Both old and new passwords are required"}, status_code=400)
+    if len(new_pw) < 8:
+        return JSONResponse({"error": "New password must be at least 8 characters"}, status_code=400)
+
+    user = db.get_user_by_username(session["username"])
+    if not user or not _verify_password(old_pw, user["password_hash"]):
+        return JSONResponse({"error": "Current password is incorrect"}, status_code=400)
+
+    db.update_user_password(user["id"], _hash_password(new_pw))
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/account/profile")
+async def api_update_profile(request: Request):
+    """Update current user's display name."""
+    token = request.cookies.get("coachgpt_token")
+    session = _get_session(token)
+    if not session:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    display_name = (body.get("display_name") or "").strip()
+    if not display_name or len(display_name) > 100:
+        return JSONResponse({"error": "Display name must be 1-100 characters"}, status_code=400)
+
+    user = db.get_user_by_username(session["username"])
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+
+    db.update_user_display_name(user["id"], display_name)
+    # Update in-memory session too so /api/me returns the fresh value immediately
+    if token in _active_sessions:
+        _active_sessions[token]["display_name"] = display_name
+    return JSONResponse({"ok": True, "display_name": display_name})
 
 
 def _login_page(error=""):
@@ -978,6 +1087,13 @@ def start():
         )
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
+
+# Mount the Next.js static export LAST so explicit routes (/, /login, /legacy,
+# /api/*) take precedence. This catches /games, /reports, /scout, etc. and
+# Next's own _next/* asset chunks.
+if SERVE_NEW_UI:
+    app.mount("/", StaticFiles(directory=str(WEB_OUT_DIR), html=True), name="web-app")
 
 
 if __name__ == "__main__":
