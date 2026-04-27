@@ -57,6 +57,7 @@ Your output MUST be valid JSON with this exact structure:
       "blocks": integer,
       "turnovers": integer,
       "fouls": integer,
+      "plus_minus": integer or null,
       "source": "gamechanger" or "manual"
     }
   ],
@@ -100,6 +101,10 @@ Rules:
    If it says "Our team is: Maryland Sting" then Maryland Sting = "ours" and the other team = "opponent".
    The coach's notes are always written from OUR perspective — "we pressed", "we lost" etc.
 3. If a stat is missing, use 0 (not null) for counting stats.
+   EXCEPTION: `plus_minus` should be `null` (not 0) when the box score
+   doesn't include it. GameChanger labels the column "+/-" or "PM" — look
+   for negative numbers (e.g. "-7"). 0 is a valid plus-minus value (the
+   player was on a wash); null means "not reported in this box score".
 4. Extract observations from coach notes. Categorize each one:
    - "opponent_tendency": How the opponent played (their patterns)
    - "adjustment": Changes the coach made during the game

@@ -172,12 +172,14 @@ Who they are and how they play. One line.
 - Press break: [1 sentence — how they break your press]
 
 ## OUR GAME PLAN
-### Offense (3 bullets max)
+### Offense (4 bullets max)
+- [specific action]
 - [specific action]
 - [specific action]
 - [specific action]
 
-### Defense (3 bullets max)
+### Defense (4 bullets max)
+- [specific action]
 - [specific action]
 - [specific action]
 - [specific action]
@@ -186,11 +188,13 @@ Who they are and how they play. One line.
 - If they [do X] → we [do Y]
 - If they [do X] → we [do Y]
 - If we're down at half → [specific adjustment]
+- If we're up by 8+ in the 2nd half → [specific adjustment to close it out]
 
 ## KEYS TO WINNING
 1. [One specific thing]
 2. [One specific thing]
 3. [One specific thing]
+4. [One specific thing]
 
 RULES:
 1. TOTAL LENGTH: Under 400 words. This fits on one page.
