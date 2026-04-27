@@ -6,6 +6,7 @@ export type GameLogEntry = {
   rebounds: number;
   assists: number;
   steals: number;
+  plus_minus?: number | null;
   above_avg: boolean;
   game_type: string;
 };
@@ -93,6 +94,10 @@ export type PlayerCardData = {
   fg_trend: number;
   three_trend: number;
   ft_trend: number;
+  plus_minus_total: number | null;
+  plus_minus_per_game: number | null;
+  l5_plus_minus_per_game: number | null;
+  plus_minus_games: number;
   type_counts: Record<string, number>;
   game_log: GameLogEntry[];
   source: string;

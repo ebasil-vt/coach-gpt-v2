@@ -52,14 +52,17 @@ function scale(value: number, max: number): number {
   return Math.min(100, Math.max(0, (value / max) * 100));
 }
 
-// ── Role mapping (same thresholds as legacy index.html:3365) ─────────────
+// ── Role tag mapping ─────────────────────────────────────────────────────
+// Tag set: Scorer, Playmaker, Disruptor, Bruiser, GameChanger, Unsung Hero.
+// Unsung Hero = positive +/- and fewer than 2 stat-derived tags — recognises
+// the kid who tilts the game without scoring big.
 const ROLE_COLORS: Record<string, string> = {
   Scorer: "#34d399",
   Playmaker: "#ef4444",
   Disruptor: "#fb923c",
-  Rebounder: "#a78bfa",
-  Contributor: "#898993",
-  "Role Player": "#898993",
+  Bruiser: "#a78bfa",
+  GameChanger: "#898993",
+  "Unsung Hero": "#22d3ee",
 };
 
 function rolesFor(p: PlayerCardData): string[] {
@@ -67,16 +70,60 @@ function rolesFor(p: PlayerCardData): string[] {
   if (p.ppg >= 8) r.push("Scorer");
   if (p.apg >= 3) r.push("Playmaker");
   if (p.spg >= 2) r.push("Disruptor");
-  if (p.rpg >= 5) r.push("Rebounder");
-  if (r.length === 0) r.push(p.ppg >= 3 ? "Contributor" : "Role Player");
+  if (p.rpg >= 5) r.push("Bruiser");
+
+  // Unsung Hero: no scoring/passing/defense/rebounding tag earned, but the
+  // kid is on the floor when good things happen. PM threshold is +2/game —
+  // not just any positive, a meaningful tilt.
+  const pm = p.plus_minus_per_game;
+  if (r.length === 0 && pm !== null && pm !== undefined && pm >= 2) {
+    r.push("Unsung Hero");
+  }
+
+  // GameChanger fallback only if still no tag and the kid scores enough
+  // to be at least a contributor — keeps it out of the way of true
+  // bench/role players.
+  if (r.length === 0 && p.ppg >= 3) r.push("GameChanger");
   return r.slice(0, 2);
 }
 
 function headlinerFor(p: PlayerCardData, primaryRole: string) {
-  if (primaryRole === "Rebounder" && p.rpg > p.ppg * 0.8) {
+  if (primaryRole === "Bruiser" && p.rpg > p.ppg * 0.8) {
     return { value: p.rpg, label: "RPG", trend: p.rpg_trend };
   }
   return { value: p.ppg, label: "PPG", trend: p.ppg_trend };
+}
+
+function PlusMinusPill({
+  value,
+  label = "+/-",
+}: {
+  value: number | null | undefined;
+  label?: string;
+}) {
+  if (value === null || value === undefined) {
+    return (
+      <span className="text-muted-foreground inline-flex items-center gap-1 text-[10px] font-medium tabular-nums">
+        {label} —
+      </span>
+    );
+  }
+  const positive = value > 0;
+  const negative = value < 0;
+  const cls = positive
+    ? "text-emerald-600 bg-emerald-500/10 border-emerald-500/30"
+    : negative
+      ? "text-rose-600 bg-rose-500/10 border-rose-500/30"
+      : "text-muted-foreground bg-muted border-border";
+  const sign = positive ? "+" : "";
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${cls}`}
+    >
+      {label} {sign}
+      {value}
+    </span>
+  );
 }
 
 // ── L5 narrative — describe what's changed in the last 5 games ────────────
@@ -226,6 +273,14 @@ function GameTile({ g, ppg }: { g: GameLogEntry; ppg: number }) {
           <Stat label="AST" value={g.assists} />
           <Stat label="STL" value={g.steals} />
         </div>
+        {g.plus_minus !== null && g.plus_minus !== undefined && (
+          <div className="mt-2 flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1">
+            <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+              +/-
+            </span>
+            <PlusMinusPill value={g.plus_minus} label="" />
+          </div>
+        )}
         <p className="text-muted-foreground mt-2 leading-relaxed">{meaning}</p>
       </HoverCardContent>
     </HoverCard>
@@ -413,6 +468,62 @@ function RadarView({ p }: { p: PlayerCardData }) {
           {summary}
         </p>
       </div>
+
+      <PlusMinusCallout p={p} />
+    </div>
+  );
+}
+
+// Compact +/- gauge shown below the radar — same data as the detailed-view
+// PlusMinusRow but laid out for the radar's narrative slot.
+function PlusMinusCallout({ p }: { p: PlayerCardData }) {
+  if (p.plus_minus_per_game === null || p.plus_minus_per_game === undefined) {
+    return (
+      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-center text-xs text-muted-foreground">
+        +/- not yet tracked — re-import a box score to populate.
+      </div>
+    );
+  }
+  const season = p.plus_minus_per_game;
+  const l5 = p.l5_plus_minus_per_game ?? season;
+  const RANGE = 10;
+  const clamp = (v: number) => Math.max(-RANGE, Math.min(RANGE, v));
+  const sPct = ((clamp(season) + RANGE) / (2 * RANGE)) * 100;
+  const lPct = ((clamp(l5) + RANGE) / (2 * RANGE)) * 100;
+  const color = l5 > 0.5 ? "#22c55e" : l5 < -0.5 ? "#ef4444" : "#f97316";
+  const sign = (n: number) => (n > 0 ? "+" : "");
+  const barLeft = Math.min(50, lPct);
+  const barWidth = Math.abs(lPct - 50);
+
+  return (
+    <div className="rounded-lg border bg-muted/40 px-4 py-3">
+      <div className="mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-bold">+/- impact</span>
+        <span className="tabular-nums">
+          season {sign(season)}
+          {season.toFixed(1)} · L5{" "}
+          <span style={{ color }} className="font-bold">
+            {sign(l5)}
+            {l5.toFixed(1)}
+          </span>
+        </span>
+      </div>
+      <div className="relative h-2 rounded-full bg-muted overflow-visible">
+        <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 inline-block h-3 w-px bg-foreground/40" />
+        <div
+          className="absolute inset-y-0 rounded-full"
+          style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: color }}
+        />
+        <span
+          className="absolute top-1/2 -translate-y-1/2 inline-block h-3 w-0.5 bg-foreground/70 rounded-full"
+          style={{ left: `calc(${sPct}% - 1px)` }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] tabular-nums text-muted-foreground">
+        <span>−{RANGE}</span>
+        <span>0</span>
+        <span>+{RANGE}</span>
+      </div>
     </div>
   );
 }
@@ -458,6 +569,9 @@ function DetailedView({ p }: { p: PlayerCardData }) {
     { stat: "APG", season: p.apg, l5: p.l5_apg, max: 8 },
     { stat: "SPG", season: p.spg, l5: p.l5_spg, max: 5 },
   ];
+
+  const hasPlusMinus =
+    p.plus_minus_per_game !== null && p.plus_minus_per_game !== undefined;
 
   // Radial shooting data — three concentric arcs.
   // Universal color scheme: <50 red, 50-79 orange, 80+ green.
@@ -513,6 +627,23 @@ function DetailedView({ p }: { p: PlayerCardData }) {
           {countingData.map((d) => (
             <StatRow key={d.stat} {...d} />
           ))}
+          {hasPlusMinus && (
+            <PlusMinusRow
+              season={p.plus_minus_per_game ?? 0}
+              l5={p.l5_plus_minus_per_game ?? p.plus_minus_per_game ?? 0}
+            />
+          )}
+          {!hasPlusMinus && (
+            <div className="grid grid-cols-[40px_1fr_56px] items-center gap-3 text-[10px]">
+              <div className="font-bold uppercase tracking-wider text-muted-foreground">
+                +/-
+              </div>
+              <div className="text-muted-foreground italic">
+                no +/- data — re-import box score to populate
+              </div>
+              <div />
+            </div>
+          )}
         </div>
       </section>
 
@@ -793,6 +924,103 @@ function StatRow({
   );
 }
 
+// ── Plus/minus row — centered baseline, bar grows left (neg) or right (pos)
+function PlusMinusRow({ season, l5 }: { season: number; l5: number }) {
+  const RANGE = 10; // ±10 covers normal youth-basketball spread
+  const clamp = (v: number) =>
+    Math.max(-RANGE, Math.min(RANGE, v));
+  const sClamped = clamp(season);
+  const lClamped = clamp(l5);
+  // 0 maps to 50%, +RANGE to 100%, -RANGE to 0%
+  const sPct = ((sClamped + RANGE) / (2 * RANGE)) * 100;
+  const lPct = ((lClamped + RANGE) / (2 * RANGE)) * 100;
+  const delta = +(l5 - season).toFixed(1);
+  const color =
+    l5 > 0.5 ? "#22c55e" : l5 < -0.5 ? "#ef4444" : "#f97316";
+  const sign = (n: number) => (n > 0 ? "+" : "");
+
+  // Position bar from 50% (center) to lPct (or vice versa for negatives)
+  const barLeft = Math.min(50, lPct);
+  const barWidth = Math.abs(lPct - 50);
+
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        render={
+          <div className="grid cursor-default grid-cols-[40px_1fr_56px] items-center gap-3" />
+        }
+      >
+        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          +/-
+        </div>
+        <div className="relative h-2 rounded-full bg-muted overflow-visible">
+          {/* center baseline */}
+          <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 inline-block h-3 w-px bg-foreground/40" />
+          {/* L5 bar from center */}
+          <div
+            className="absolute inset-y-0 rounded-full"
+            style={{
+              left: `${barLeft}%`,
+              width: `${barWidth}%`,
+              background: color,
+            }}
+          />
+          {/* Season tick marker */}
+          <span
+            className="absolute top-1/2 -translate-y-1/2 inline-block h-3 w-0.5 bg-foreground/70 rounded-full"
+            style={{ left: `calc(${sPct}% - 1px)` }}
+          />
+        </div>
+        <div className="flex items-baseline justify-end gap-1.5 text-right tabular-nums text-[12px] leading-tight">
+          <span className="text-muted-foreground">
+            {sign(season)}
+            {season.toFixed(1)}
+          </span>
+          <span style={{ color }} className="font-bold">
+            {sign(l5)}
+            {l5.toFixed(1)}
+          </span>
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent side="top" className="w-64 p-3 text-xs">
+        <div className="font-bold text-sm">+/- per game</div>
+        <div className="my-2 grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wider">
+              Season avg
+            </div>
+            <div className="text-base font-bold tabular-nums">
+              {sign(season)}
+              {season.toFixed(1)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wider">
+              Last 5 avg
+            </div>
+            <div className="text-base font-bold tabular-nums" style={{ color }}>
+              {sign(l5)}
+              {l5.toFixed(1)}
+            </div>
+          </div>
+        </div>
+        <div className="my-2 h-px bg-border" />
+        <p className="text-foreground/80 leading-relaxed">
+          {l5 > 0.5
+            ? `Team is ${sign(l5)}${l5.toFixed(1)} per game when on the floor recently — net positive impact.`
+            : l5 < -0.5
+              ? `Team is ${l5.toFixed(1)} per game when on the floor recently — getting outscored while in.`
+              : "Wash — neither tilts the game noticeably."}{" "}
+          {Math.abs(delta) >= 0.5 &&
+            (delta > 0
+              ? `Trending ${sign(delta)}${delta.toFixed(1)} vs season — improving.`
+              : `Trending ${delta.toFixed(1)} vs season — cooling off.`)}
+        </p>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
 function fullLabel(short: string): string {
   if (short === "FG") return "Field Goal %";
   if (short === "3PT") return "3-Point %";
@@ -882,8 +1110,9 @@ export function PlayerCard({
           <CardTitle className="truncate text-[17px] font-bold leading-snug tracking-tight">
             {p.name}
           </CardTitle>
-          <CardDescription className="mt-0.5 text-[11px] uppercase tracking-wider">
-            {p.games_played} games
+          <CardDescription className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider">
+            <span>{p.games_played} games</span>
+            <PlusMinusPill value={p.plus_minus_per_game} label="+/- avg" />
           </CardDescription>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {roles.map((r) => (
