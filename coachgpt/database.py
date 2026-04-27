@@ -363,6 +363,7 @@ def list_games(opponent: str = None, limit: int = 50) -> list[dict]:
 # ── Player Stats Operations ─────────────────────────────────────
 
 def add_player_stats(game_id: str, stats: list[dict]):
+    _ensure_plus_minus_column()
     conn = get_connection()
     for s in stats:
         conn.execute(
@@ -370,8 +371,8 @@ def add_player_stats(game_id: str, stats: list[dict]):
                player_number, minutes, points, fg_made, fg_attempted,
                three_made, three_attempted, ft_made, ft_attempted,
                rebounds, off_rebounds, def_rebounds, assists, steals,
-               blocks, turnovers, fouls, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               blocks, turnovers, fouls, plus_minus, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (str(uuid.uuid4())[:8], game_id, s.get("team", "ours"),
              s.get("player_name"), s.get("player_number"),
              s.get("minutes"), s.get("points", 0),
@@ -382,6 +383,7 @@ def add_player_stats(game_id: str, stats: list[dict]):
              s.get("def_rebounds", 0), s.get("assists", 0),
              s.get("steals", 0), s.get("blocks", 0),
              s.get("turnovers", 0), s.get("fouls", 0),
+             s.get("plus_minus"),
              s.get("source", "manual"))
         )
     conn.commit()
@@ -952,6 +954,18 @@ def use_coach_note(note_id: str, game_id: str):
     conn.close()
 
 
+def _ensure_plus_minus_column():
+    """Add plus_minus to player_stats if missing — idempotent."""
+    conn = get_connection()
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(player_stats)")]
+        if "plus_minus" not in cols:
+            conn.execute("ALTER TABLE player_stats ADD COLUMN plus_minus INTEGER")
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def get_player_cards(season_id: str = None) -> list[dict]:
     """Aggregate player stats from per-game box scores into card data.
 
@@ -959,15 +973,21 @@ def get_player_cards(season_id: str = None) -> list[dict]:
     last-5 averages, shooting splits, and recent game log.
     Each player is identified by jersey number (player_number).
     """
+    _ensure_plus_minus_column()
     conn = get_connection()
 
-    # Get all our players' per-game stats, joined with game info
+    # Get all our players' per-game stats, joined with game info.
+    # Exclude orphan rows (no jersey number, or name marked 'Unassigned')
+    # so they never reach the player-cards UI.
     query = """
         SELECT ps.*, g.date, g.opponent, g.result, g.our_score, g.opp_score,
                g.game_type, g.event_name
         FROM player_stats ps
         JOIN games g ON ps.game_id = g.id
         WHERE ps.team = 'ours'
+          AND ps.player_number IS NOT NULL
+          AND TRIM(ps.player_number) != ''
+          AND COALESCE(ps.player_name, '') != 'Unassigned'
         ORDER BY g.date DESC
     """
     rows = conn.execute(query).fetchall()
@@ -1002,6 +1022,17 @@ def get_player_cards(season_id: str = None) -> list[dict]:
         total_stl = sum(g.get("steals", 0) for g in games)
         total_blk = sum(g.get("blocks", 0) for g in games)
         total_to  = sum(g.get("turnovers", 0) for g in games)
+        # plus_minus may be NULL (not yet populated by ingestion). Treat None
+        # as missing so a coach knows which games haven't been parsed yet.
+        pm_games = [g for g in games if g.get("plus_minus") is not None]
+        pm_total = sum(g["plus_minus"] for g in pm_games) if pm_games else None
+        pm_per_game = round(pm_total / len(pm_games), 1) if pm_games else None
+        l5_pm_games = [g for g in games[:5] if g.get("plus_minus") is not None]
+        l5_pm_per_game = (
+            round(sum(g["plus_minus"] for g in l5_pm_games) / len(l5_pm_games), 1)
+            if l5_pm_games
+            else None
+        )
         total_fg_m = sum(g.get("fg_made", 0) for g in games)
         total_fg_a = sum(g.get("fg_attempted", 0) for g in games)
         total_3_m  = sum(g.get("three_made", 0) for g in games)
@@ -1054,6 +1085,7 @@ def get_player_cards(season_id: str = None) -> list[dict]:
                 "rebounds": g.get("rebounds", 0),
                 "assists": g.get("assists", 0),
                 "steals": g.get("steals", 0),
+                "plus_minus": g.get("plus_minus"),
                 "above_avg": g.get("points", 0) > ppg,
                 "game_type": g.get("game_type", "league"),
             })
@@ -1064,6 +1096,11 @@ def get_player_cards(season_id: str = None) -> list[dict]:
             "games_played": total_games,
             # Season averages
             "ppg": ppg, "rpg": rpg, "apg": apg, "spg": spg, "bpg": bpg, "topg": topg,
+            # Plus/minus — null until ingestion populates the column
+            "plus_minus_total": pm_total,
+            "plus_minus_per_game": pm_per_game,
+            "l5_plus_minus_per_game": l5_pm_per_game,
+            "plus_minus_games": len(pm_games),
             # Last 5 averages
             "l5_ppg": l5_ppg, "l5_rpg": l5_rpg, "l5_apg": l5_apg, "l5_spg": l5_spg,
             # Shooting totals
